@@ -26,6 +26,7 @@
 #import "SequencerKeyframeEasing.h"
 
 @implementation SequencerSoundChannel
+@synthesize isEpanded;
 
 - (id) init
 {
@@ -37,9 +38,24 @@
     return self;
 }
 
+- (id) initWithSerialization:(id)ser
+{
+    self = [super initWithSerialization:ser];
+    if (self)
+    {
+        NSNumber * isExpandedData = [ser objectForKey:@"isExpanded"];
+        if(isExpandedData)
+        {
+            self.isEpanded = [isExpandedData boolValue];
+        }
+    }
+    
+    return self;
+}
+
 - (SequencerKeyframe*) defaultKeyframe
 {
-    SequencerKeyframe* kf = [[[SequencerKeyframe alloc] init] autorelease];
+    SequencerKeyframe* kf = [[SequencerKeyframe alloc] init];
     
     kf.value = [NSArray arrayWithObjects:
                 @"",
@@ -49,10 +65,18 @@
                 nil];
     kf.type = kCCBKeyframeTypeSoundEffects;
     kf.name = NULL;
-    kf.easing = [[[SequencerKeyframeEasing alloc] init] autorelease];
+    kf.easing = [[SequencerKeyframeEasing alloc] init];
     kf.easing.type = kCCBKeyframeEasingInstant;
     
     return kf;
+}
+
+
+- (id) serialize
+{
+    NSMutableDictionary * dict = [super serialize];
+    dict[@"isExpanded"] = @(isEpanded);
+    return dict;
 }
 
 @end

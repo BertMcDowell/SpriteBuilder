@@ -29,13 +29,17 @@
 
 @interface SequencerCell : NSCell
 {
-    CCNode* node;
-    SequencerChannel* channel;
+    CCNode* __weak node;
+    SequencerChannel* __weak channel;
     
     BOOL imagesLoaded;
     
     NSImage* imgKeyframe;
     NSImage* imgKeyframeSel;
+    
+    NSImage* imgKeyframeLrg;
+    NSImage* imgKeyframeSelLrg;
+    
     
     NSImage* imgRowBg0;
     NSImage* imgRowBg1;
@@ -55,7 +59,7 @@
     NSImage* imgKeyframeHint;
 }
 
-@property (nonatomic,assign) CCNode* node;
-@property (nonatomic,assign) SequencerChannel* channel;
+@property (nonatomic,weak) CCNode* node;
+@property (nonatomic,weak) SequencerChannel* channel;
 
 @end

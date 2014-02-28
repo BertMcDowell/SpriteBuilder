@@ -38,7 +38,7 @@
     
     self.displayName = @"Channel";
     
-    self.seqNodeProp = [[[SequencerNodeProperty alloc] initWithChannel:self] autorelease];
+    self.seqNodeProp = [[SequencerNodeProperty alloc] initWithChannel:self];
     
     
     return self;
@@ -51,7 +51,7 @@
     
     if (!ser) return self;
     
-    self.seqNodeProp = [[[SequencerNodeProperty alloc] initWithSerialization:ser] autorelease];
+    self.seqNodeProp = [[SequencerNodeProperty alloc] initWithSerialization:ser];
     
     return self;
 }
@@ -76,7 +76,7 @@
     return NULL;
 }
 
-- (void) addDefaultKeyframeAtTime:(float)t
+- (SequencerKeyframe*) addDefaultKeyframeAtTime:(float)t
 {
     [[AppDelegate appDelegate] saveUndoStateWillChangeProperty:@"*addchannelkeyframe"];
     
@@ -85,6 +85,7 @@
     [self.seqNodeProp setKeyframe:kf];
     
     kf.time = t;
+    return kf;
 }
 
 - (NSArray*) keyframesAtTime:(float)t
@@ -105,16 +106,10 @@
     SequencerChannel* copy = [[[self class] alloc] init];
     
     copy.displayName = self.displayName;
-    copy.seqNodeProp = [[self.seqNodeProp copy] autorelease];
+    copy.seqNodeProp = [self.seqNodeProp copy];
     
     return copy;
 }
 
-- (void) dealloc
-{
-    self.displayName = NULL;
-    self.seqNodeProp = NULL;
-    [super dealloc];
-}
 
 @end

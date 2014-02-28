@@ -26,6 +26,9 @@
 #import "SequencerNodeProperty.h"
 #import "SequencerKeyframeEasing.h"
 
+NSString * kClipboardKeyFrames          = @"com.cocosbuilder.keyframes";
+NSString * kClipboardChannelKeyframes   = @"com.cocosbuilder.channelkeyframes";
+
 @implementation SequencerKeyframe
 
 @synthesize value;
@@ -58,7 +61,7 @@
     self.type = [[ser valueForKey:@"type"] intValue];
     self.name = [ser valueForKey:@"name"];
     self.time = [[ser valueForKey:@"time"] floatValue];
-    self.easing = [[[SequencerKeyframeEasing alloc] initWithSerialization:[ser objectForKey:@"easing"]] autorelease];
+    self.easing = [[SequencerKeyframeEasing alloc] initWithSerialization:[ser objectForKey:@"easing"]];
     // fix possible broken easing/type combinations
     if (![self supportsFiniteTimeInterpolations]) {
         easing.type = kCCBKeyframeEasingInstant;
@@ -114,6 +117,10 @@
     {
         return kCCBKeyframeTypeFloatXY;
     }
+    else if([type isEqualToString:@"Float"])
+    {
+        return kCCBKeyframeTypeFloat;
+    }
     else
     {
         return kCCBKeyframeTypeUndefined;
@@ -152,7 +159,7 @@
         return ([[value objectAtIndex:0] floatValue] == [[keyframe.value objectAtIndex:0] floatValue]
                 && [[value objectAtIndex:1] floatValue] == [[keyframe.value objectAtIndex:1] floatValue]);
     }
-    else if (type == kCCBKeyframeTypeByte)
+    else if (type == kCCBKeyframeTypeByte || type == kCCBKeyframeTypeFloat)
     {
         return ([value intValue] == [keyframe.value intValue]);
     }
@@ -177,12 +184,5 @@
 }
 
 
-- (void) dealloc
-{
-    [value release];
-    [name release];
-    [easing release];
-    [super dealloc];
-}
 
 @end

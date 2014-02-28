@@ -39,20 +39,17 @@
     return @"Undefined";
 }
 
-- (void) dealloc
-{
-    self.message = NULL;
-    self.relatedFile = NULL;
-    self.resolution = NULL;
-    [super dealloc];
-}
-
+@dynamic description;
 - (NSString*) description
 {
     NSString* resString = @"";
     if (self.resolution) resString = [NSString stringWithFormat:@" (%@)", self.resolution];
     
-    return [NSString stringWithFormat:@"%@%@: %@", [CCBWarning formatTargetType:self.targetType], resString, self.message];
+    NSString * relaventFile = @"";
+    if(self.relatedFile) relaventFile = [NSString stringWithFormat:@" (%@)", self.relatedFile];
+    
+    
+    return [NSString stringWithFormat:@"%@%@%@: %@", [CCBWarning formatTargetType:self.targetType], resString, relaventFile, self.message];
 }
 
 @end
@@ -61,7 +58,6 @@
 @implementation CCBWarnings
 
 @synthesize warningsDescription;
-@synthesize warnings;
 @synthesize currentTargetType;
 
 - (id) init
@@ -69,8 +65,8 @@
     self = [super init];
     if (!self) return NULL;
     
-    warnings = [[NSMutableArray array] retain];
-    warningsFiles = [[NSMutableDictionary dictionary] retain];
+	_warnings = [NSMutableArray array];
+    warningsFiles = [NSMutableDictionary dictionary];
     self.warningsDescription = @"Warnings";
     
     return self;
@@ -88,7 +84,7 @@
 
 - (void) addWarningWithDescription:(NSString*)description isFatal:(BOOL)fatal relatedFile:(NSString*) relatedFile resolution:(NSString*) resolution
 {
-    CCBWarning* warning = [[[CCBWarning alloc] init] autorelease];
+    CCBWarning* warning = [[CCBWarning alloc] init];
     warning.message = description;
     warning.relatedFile = relatedFile;
     warning.fatal = fatal;
@@ -98,7 +94,7 @@
 
 - (void) addWarningWithDescription:(NSString*)description
 {
-    CCBWarning* warning = [[[CCBWarning alloc] init] autorelease];
+    CCBWarning* warning = [[CCBWarning alloc] init];
     warning.message = description;
     [self addWarning:warning];
 }
@@ -107,7 +103,7 @@
 {
     warning.targetType = currentTargetType;
     
-    [warnings addObject:warning];
+    [_warnings addObject:warning];
     NSLog(@"CCB WARNING: %@", warning.description);
     
     if (warning.relatedFile)
@@ -129,11 +125,5 @@
     return [warningsFiles objectForKey:relatedFile];
 }
 
-- (void) dealloc
-{
-    [warnings release];
-    [warningsFiles release];
-    [super dealloc];
-}
 
 @end

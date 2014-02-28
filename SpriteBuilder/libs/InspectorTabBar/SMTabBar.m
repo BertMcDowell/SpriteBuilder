@@ -41,6 +41,8 @@ static char SMObservationContext;
 }
 
 - (void)dealloc {
+	SBLogSelf();
+	
     // remove observer for properties
     [self removeObserver:self forKeyPath:@"items" context:&SMObservationContext];
     [self removeObserver:self forKeyPath:@"selectedItem" context:&SMObservationContext];
@@ -56,6 +58,11 @@ static char SMObservationContext;
 }
 
 #pragma mark - Actions
+
+-(void)selectBarButtonIndex:(NSInteger)index
+{
+    [self selectBarButton:self.barButtons[index]];
+}
 
 - (void)selectBarButton:(id)sender {
     // select a bar button

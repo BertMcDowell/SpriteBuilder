@@ -40,11 +40,15 @@ enum
     kCCBKeyframeTypeSpriteFrame,
     kCCBKeyframeTypeFloatXY,
     kCCBKeyframeTypeColor4,
+    kCCBKeyframeTypeFloat,
     
     // Channels
     kCCBKeyframeTypeSoundEffects,
     kCCBKeyframeTypeCallbacks,
 };
+
+NSString * kClipboardKeyFrames;
+NSString * kClipboardChannelKeyframes;
 
 @interface SequencerKeyframe : NSObject
 {
@@ -56,20 +60,20 @@ enum
     float timeAtDragStart;
     BOOL selected;
     
-    SequencerNodeProperty* parent;
+    SequencerNodeProperty* __weak parent;
     SequencerKeyframeEasing* easing;
 }
 
-@property (nonatomic,retain) id value;
+@property (nonatomic,strong) id value;
 @property (nonatomic,assign) int type;
-@property (nonatomic,retain) NSString* name;
+@property (nonatomic,strong) NSString* name;
 
 @property (nonatomic,assign) float time;
 @property (nonatomic,assign) float timeAtDragStart;
 @property (nonatomic,assign) BOOL selected;
 
-@property (nonatomic,assign) SequencerNodeProperty* parent;
-@property (nonatomic,retain) SequencerKeyframeEasing* easing;
+@property (nonatomic,weak) SequencerNodeProperty* parent;
+@property (nonatomic,strong) SequencerKeyframeEasing* easing;
 
 - (id) initWithSerialization:(id)ser;
 - (id) serialization;

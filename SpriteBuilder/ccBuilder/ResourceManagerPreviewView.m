@@ -29,6 +29,8 @@
 #import "AppDelegate.h"
 #import "ProjectSettings.h"
 #import "FCFormatConverter.h"
+#import <AVFoundation/AVFoundation.h>
+#import "ResourceManagerPreivewAudio.h"
 
 @implementation ResourceManagerPreviewView
 
@@ -39,6 +41,7 @@
 @synthesize previewPhonehd;
 @synthesize previewTablet;
 @synthesize previewTablethd;
+@dynamic    format_supportsPVRTC;
 
 #pragma mark Setup
 
@@ -51,6 +54,14 @@
     [previewPhonehd setAllowsCutCopyPaste:NO];
     [previewTablet setAllowsCutCopyPaste:NO];
     [previewTablethd setAllowsCutCopyPaste:NO];
+    
+    previewAudioViewController = [[ResourceManagerPreviewAudio alloc] initWithNibName:@"ResourceManagerPreviewAudio" bundle:[NSBundle mainBundle]];
+    
+    previewAudioViewController.view.frame = CGRectMake(0, 0, previewSound.frame.size.width, previewSound.frame.size.height);
+    
+    [previewSound addSubview:previewAudioViewController.view];
+    
+    [previewAudioViewController setupPlayer];
 }
 
 - (AppDelegate*) appDelegate
@@ -148,7 +159,7 @@
             self.format_android_compress = [[settings valueForResource:res andKey:@"format_android_compress"] boolValue];
             
             NSString* imgPreviewPath = [res.filePath stringByAppendingPathExtension:@"ppng"];
-            NSImage* img = [[[NSImage alloc] initWithContentsOfFile:imgPreviewPath] autorelease];
+            NSImage* img = [[NSImage alloc] initWithContentsOfFile:imgPreviewPath];
             if (!img)
             {
                 img = [NSImage imageNamed:@"ui-nopreview.png"];
@@ -175,22 +186,24 @@
             icon.size = NSMakeSize(128, 128);
             [previewSoundImage setImage:icon];
             
-            // Update sound
-            QTMovie* movie = [QTMovie movieWithFile:res.filePath error:NULL];
             
-            [previewSound setMovie:movie];
+//            AVPlayerItem * playerItem = [[[AVPlayerItem alloc] initWithURL:[NSURL URLWithString:res.filePath]] autorelease];
+            //[previewSound.player replaceCurrentItemWithPlayerItem:playerItem];
             
-            [previewSound pause:NULL];
-            [previewSound gotoBeginning:NULL];
+          
+            [previewAudioViewController loadAudioFile:res.filePath];
+           
             
             self.enabled = YES;
             
             [viewSound setHidden:NO];
+          
+            
         }
         else if (res.type == kCCBResTypeCCBFile)
         {
             NSString* imgPreviewPath = [res.filePath stringByAppendingPathExtension:@"ppng"];
-            NSImage* img = [[[NSImage alloc] initWithContentsOfFile:imgPreviewPath] autorelease];
+            NSImage* img = [[NSImage alloc] initWithContentsOfFile:imgPreviewPath];
             if (!img)
             {
                 img = [NSImage imageNamed:@"ui-nopreview.png"];
@@ -305,6 +318,27 @@
 }
 
 #pragma mark Edit properties
+
+-(BOOL)format_supportsPVRTC
+{
+    //early out.
+    if(_previewedResource.type != kCCBResTypeImage)
+        return YES;
+    
+    NSBitmapImageRep * bitmapRep = self.imgMain.representations[0];
+    if(bitmapRep == nil)
+        return YES;
+    
+    if(bitmapRep.pixelsHigh != bitmapRep.pixelsWide)
+        return NO;
+    
+    //Is power of 2?
+    double result = log((double)bitmapRep.pixelsHigh)/log(2.0);
+    if((1 << (int)result) != bitmapRep.pixelsHigh)
+        return NO;
+    
+    return YES;
+}
 
 - (void) setScaleFrom:(int)scaleFrom
 {
@@ -570,7 +604,7 @@
 
 - (CGFloat) splitView:(NSSplitView *)splitView constrainMinCoordinate:(CGFloat)proposedMinimumPosition ofSubviewAt:(NSInteger)dividerIndex
 {
-    if (proposedMinimumPosition < 160) return 160;
+    if (proposedMinimumPosition < 220) return 220;
     else return proposedMinimumPosition;
 }
 
@@ -581,15 +615,5 @@
     else return proposedMaximumPosition;
 }
 
-- (void) dealloc
-{
-    self.imgMain = NULL;
-    self.imgPhone = NULL;
-    self.imgPhonehd = NULL;
-    self.imgTablet = NULL;
-    self.imgTablethd = NULL;
-    
-    [super dealloc];
-}
 
 @end

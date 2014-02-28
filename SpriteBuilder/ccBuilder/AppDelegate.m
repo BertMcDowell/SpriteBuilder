@@ -57,6 +57,7 @@
 #import "PublishSettingsWindow.h"
 #import "ProjectSettings.h"
 #import "ResourceManagerOutlineHandler.h"
+#import "ResourceManagerOutlineView.h"
 #import "SavePanelLimiter.h"
 #import "CCBPublisher.h"
 #import "CCBWarnings.h"
@@ -71,13 +72,11 @@
 #import "SequencerKeyframe.h"
 #import "SequencerKeyframeEasing.h"
 #import "SequencerKeyframeEasingWindow.h"
-#import "JavaScriptDocument.h"
-#import "PlayerConnection.h"
-#import "PlayerConsoleWindow.h"
 #import "SequencerUtil.h"
 #import "SequencerStretchWindow.h"
 #import "SequencerSoundChannel.h"
 #import "SequencerCallbackChannel.h"
+#import "SoundFileImageController.h"
 #import "CustomPropSettingsWindow.h"
 #import "CustomPropSetting.h"
 #import "MainToolbarDelegate.h"
@@ -88,12 +87,9 @@
 #import "CCBSplitHorizontalView.h"
 #import "SpriteSheetSettingsWindow.h"
 #import "AboutWindow.h"
-#import "CCBHTTPServer.h"
-#import "JavaScriptAutoCompleteHandler.h"
 #import "CCBFileUtil.h"
 #import "ResourceManagerPreviewView.h"
 #import "ResourceManagerUtil.h"
-#import "SMLErrorPopOver.h"
 #import "SMTabBar.h"
 #import "SMTabBarItem.h"
 #import "ResourceManagerTilelessEditorManager.h"
@@ -105,9 +101,13 @@
 #import "CCBProjCreator.h"
 #import "CCTextureCache.h"
 #import "CCLabelBMFont_Private.h"
-
+#import "WarningTableViewHandler.h"
+#import "CCNode+NodeInfo.h"
+#import "CCNode_Private.h"
+#import "UsageManager.h"
 #import <ExceptionHandling/NSExceptionHandler.h>
-
+#import <objc/runtime.h>
+#import <objc/message.h>
 
 @implementation AppDelegate
 
@@ -119,8 +119,6 @@
 @synthesize canEditCustomClass;
 @synthesize hasOpenedDocument;
 @synthesize defaultCanvasSize;
-@synthesize plugInManager;
-@synthesize resManager;
 @synthesize projectOutlineHandler;
 @synthesize showGuides;
 @synthesize snapToGuides;
@@ -130,12 +128,12 @@
 @synthesize menuContextKeyframe;
 @synthesize menuContextKeyframeInterpol;
 @synthesize menuContextResManager;
+@synthesize menuContextKeyframeNoselection;
 @synthesize outlineProject;
 @synthesize errorDescription;
 @synthesize selectedNodes;
 @synthesize loadedSelectedNodes;
 @synthesize panelVisibilityControl;
-@synthesize connection;
 @synthesize propertyInspectorHandler;
 @synthesize localizationEditorHandler;
 @synthesize physicsHandler;
@@ -169,8 +167,25 @@ static AppDelegate* sharedAppDelegate;
     [inspectorCodeScroll setDocumentView:inspectorCodeDocumentView];
 }
 
+
+//This function replaces the current CCNode visit with "customVisit" to ensure that 'hidden' flagged nodes are invisible.
+//However it then proceeds to call the real '[CCNode visit]' (now renamed oldVisit).
+void ApplyCustomNodeVisitSwizzle()
+{
+    Method origMethod = class_getInstanceMethod([CCNode class], @selector(visit));
+    Method newMethod = class_getInstanceMethod([CCNode class], @selector(customVisit));
+    
+    IMP origImp = method_getImplementation(origMethod);
+    IMP newImp = method_getImplementation(newMethod);
+    
+    class_replaceMethod([CCNode class], @selector(visit), newImp, method_getTypeEncoding(newMethod));
+    class_addMethod([CCNode class], @selector(oldVisit), origImp, method_getTypeEncoding(origMethod));
+    
+}
+
 - (void) setupCocos2d
 {
+    ApplyCustomNodeVisitSwizzle();
     // Insert code here to initialize your application
     CCDirectorMac *director = (CCDirectorMac*) [CCDirector sharedDirector];
 	
@@ -178,6 +193,7 @@ static AppDelegate* sharedAppDelegate;
 	[director setProjection:CCDirectorProjection2D];
     //[cocosView openGLContext];
     
+	NSAssert(cocosView, @"cocosView is nil");
 	[director setView:cocosView];
     
 	// EXPERIMENTAL stuff.
@@ -190,7 +206,8 @@ static AppDelegate* sharedAppDelegate;
 	
 	[director runWithScene:[CocosScene sceneWithAppDelegate:self]];
 	
-	NSAssert( [NSThread currentThread] == [[CCDirector sharedDirector] runningThread], @"cocos2d shall run on the Main Thread. Compile SpriteBuilder with CC_DIRECTOR_MAC_THREAD=2");
+	NSAssert( [NSThread currentThread] == [[CCDirector sharedDirector] runningThread],
+			 @"cocos2d should run on the Main Thread. Compile SpriteBuilder with CC_DIRECTOR_MAC_THREAD=2");
 }
 
 - (void) setupSequenceHandler
@@ -202,8 +219,15 @@ static AppDelegate* sharedAppDelegate;
     sequenceHandler.scroller = timelineScroller;
     sequenceHandler.scrollView = sequenceScrollView;
     
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateSoundImages:) name:kSoundFileImageLoaded object:nil];
+    
     [self updateTimelineMenu];
     [sequenceHandler updateScaleSlider];
+}
+
+-(void)updateSoundImages:(NSNotification*)notice
+{
+    [outlineHierarchy reloadData];
 }
 
 - (void) setupTabBar
@@ -247,25 +271,32 @@ static AppDelegate* sharedAppDelegate;
     
     NSImage* imgFolder = [NSImage imageNamed:@"inspector-folder.png"];
     [imgFolder setTemplate:YES];
-    SMTabBarItem* itemFolder = [[[SMTabBarItem alloc] initWithImage:imgFolder tag:0] autorelease];
+    SMTabBarItem* itemFolder = [[SMTabBarItem alloc] initWithImage:imgFolder tag:0];
     itemFolder.toolTip = @"File View";
     itemFolder.keyEquivalent = @"";
     [items addObject:itemFolder];
     
     NSImage* imgObjs = [NSImage imageNamed:@"inspector-objects.png"];
     [imgObjs setTemplate:YES];
-    SMTabBarItem* itemObjs = [[[SMTabBarItem alloc] initWithImage:imgObjs tag:1] autorelease];
+    SMTabBarItem* itemObjs = [[SMTabBarItem alloc] initWithImage:imgObjs tag:1];
     itemObjs.toolTip = @"Tileless Editor View";
     itemObjs.keyEquivalent = @"";
     [items addObject:itemObjs];
     
     NSImage* imgNodes = [NSImage imageNamed:@"inspector-nodes.png"];
     [imgNodes setTemplate:YES];
-    SMTabBarItem* itemNodes = [[[SMTabBarItem alloc] initWithImage:imgNodes tag:2] autorelease];
+    SMTabBarItem* itemNodes = [[SMTabBarItem alloc] initWithImage:imgNodes tag:2];
     itemNodes.toolTip = @"Node Library View";
     itemNodes.keyEquivalent = @"";
     [items addObject:itemNodes];
     
+    NSImage* imgWarnings = [NSImage imageNamed:@"inspector-warning.png"];
+    [imgWarnings setTemplate:YES];
+    SMTabBarItem* itemWarnings = [[SMTabBarItem alloc] initWithImage:imgWarnings tag:3];
+    itemWarnings.toolTip = @"Warnings view";
+    itemWarnings.keyEquivalent = @"";
+    [items addObject:itemWarnings];
+
     projectViewTabs.items = items;
     projectViewTabs.delegate = self;
 }
@@ -276,28 +307,28 @@ static AppDelegate* sharedAppDelegate;
     
     NSImage* imgProps = [NSImage imageNamed:@"inspector-props.png"];
     [imgProps setTemplate:YES];
-    SMTabBarItem* itemProps = [[[SMTabBarItem alloc] initWithImage:imgProps tag:0] autorelease];
+    SMTabBarItem* itemProps = [[SMTabBarItem alloc] initWithImage:imgProps tag:0];
     itemProps.toolTip = @"Item Properties";
     itemProps.keyEquivalent = @"";
     [items addObject:itemProps];
     
     NSImage* imgCode = [NSImage imageNamed:@"inspector-codeconnections.png"];
     [imgCode setTemplate:YES];
-    SMTabBarItem* itemCode = [[[SMTabBarItem alloc] initWithImage:imgCode tag:0] autorelease];
+    SMTabBarItem* itemCode = [[SMTabBarItem alloc] initWithImage:imgCode tag:0];
     itemCode.toolTip = @"Item Code Connections";
     itemCode.keyEquivalent = @"";
     [items addObject:itemCode];
     
     NSImage* imgPhysics = [NSImage imageNamed:@"inspector-physics"];
     [imgPhysics setTemplate:YES];
-    SMTabBarItem* itemPhysics = [[[SMTabBarItem alloc] initWithImage:imgPhysics tag:0] autorelease];
-    itemPhysics.toolTip = @"Item Templates";
+    SMTabBarItem* itemPhysics = [[SMTabBarItem alloc] initWithImage:imgPhysics tag:0];
+    itemPhysics.toolTip = @"Item Physics";
     itemPhysics.keyEquivalent = @"";
     [items addObject:itemPhysics];
     
     NSImage* imgTemplate = [NSImage imageNamed:@"inspector-template.png"];
     [imgTemplate setTemplate:YES];
-    SMTabBarItem* itemTemplate = [[[SMTabBarItem alloc] initWithImage:imgTemplate tag:0] autorelease];
+    SMTabBarItem* itemTemplate = [[SMTabBarItem alloc] initWithImage:imgTemplate tag:0];
     itemTemplate.toolTip = @"Item Templates";
     itemTemplate.keyEquivalent = @"";
     [items addObject:itemTemplate];
@@ -368,16 +399,25 @@ static AppDelegate* sharedAppDelegate;
     [tilelessEditorSplitView setDelegate:tilelessEditorManager];
 }
 
-- (void) setupPlayerConnection
-{
-    connection = [[PlayerConnection alloc] init];
-    [connection run];
-}
-
 - (void) setupResourceManager
 {
+    
+    NSColor * color = [NSColor colorWithCalibratedRed:0.0f green:0.50f blue:0.50f alpha:1.0f];
+    
+    color = [color colorUsingColorSpace:[NSColorSpace deviceRGBColorSpace]];
+
+    CGFloat r, g, b, a;
+    [color getRed:&r green:&g blue:&b alpha:&a];
+    
+    CCColor* colorValue = [CCColor colorWithRed:r green:g blue:b alpha:1];
+    
+    NSColor * color2 = [NSColor colorWithDeviceRed:r green:g blue:b alpha:a];
+    NSColor * calibratedColor = [color2 colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+
+    NSLog(@"R:%f G:%f B:%f A:%f",calibratedColor.redComponent, calibratedColor.greenComponent, calibratedColor.blueComponent, calibratedColor.alphaComponent);
+    
     // Load resource manager
-    resManager = [ResourceManager sharedManager];
+	[ResourceManager sharedManager];
     
     // Setup preview
     previewViewOwner = [[ResourceManagerPreviewView alloc] init];
@@ -402,6 +442,15 @@ static AppDelegate* sharedAppDelegate;
     resourceManagerSplitView.delegate = previewViewOwner;
     
     [previewViewOwner setPreviewFile:NULL];
+    
+    //Setup warnings outline
+    warningHandler = [[WarningTableViewHandler alloc] init];
+    
+    self.warningTableView.delegate = warningHandler;
+    self.warningTableView.target = warningHandler;
+    self.warningTableView.dataSource = warningHandler;
+   // [self.warningTableView setGridStyleMask:NSTableViewSolidHorizontalGridLineMask];
+    [self updateWarningsOutline];
 }
 
 - (void) setupGUIWindow
@@ -414,26 +463,22 @@ static AppDelegate* sharedAppDelegate;
     
     guiWindow = [[CCBTransparentWindow alloc] initWithContentRect:frame];
     
-    guiView = [[[CCBTransparentView alloc] initWithFrame:cocosView.frame] autorelease];
+    guiView = [[CCBTransparentView alloc] initWithFrame:cocosView.frame];
     [guiWindow setContentView:guiView];
     guiWindow.delegate = self;
     
     [window addChildWindow:guiWindow ordered:NSWindowAbove];
 }
 
-- (void) setupAutoCompleteHandler
-{
-    JavaScriptAutoCompleteHandler* handler = [JavaScriptAutoCompleteHandler sharedAutoCompleteHandler];
-    
-    NSString* dir = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"autoCompleteDefinitions"];
-    
-    [handler loadGlobalFilesFromDirectory:dir];
-}
-
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification
 {
+    [[BITHockeyManager sharedHockeyManager] configureWithIdentifier:@"138b7cc7454016e05dbbc512f38082b7" companyName:@"Apportable" crashReportManagerDelegate:self];
+    [[BITHockeyManager sharedHockeyManager] startManager];
+    
     [[NSUserDefaults standardUserDefaults] setObject:[NSNumber numberWithBool:YES] forKey:@"ApplePersistenceIgnoreState"];
-    [self.window center];
+    
+    UsageManager* usageManager = [[UsageManager alloc] init];
+    [usageManager registerUsage];
     
     // Install default templates
     [propertyInspectorHandler installDefaultTemplatesReplace:NO];
@@ -444,8 +489,6 @@ static AppDelegate* sharedAppDelegate;
     
     sharedAppDelegate = self;
     
-    [self setupAutoCompleteHandler];
-    
     [[NSExceptionHandler defaultExceptionHandler] setExceptionHandlingMask: NSLogUncaughtExceptionMask | NSLogUncaughtSystemExceptionMask | NSLogUncaughtRuntimeErrorMask];
     
     // iOS
@@ -453,8 +496,12 @@ static AppDelegate* sharedAppDelegate;
     defaultCanvasSizes[kCCBCanvasSizeIPhonePortrait] = CGSizeMake(320, 480);
     defaultCanvasSizes[kCCBCanvasSizeIPhone5Landscape] = CGSizeMake(568, 320);
     defaultCanvasSizes[kCCBCanvasSizeIPhone5Portrait] = CGSizeMake(320, 568);
-    defaultCanvasSizes[kCCBCanvasSizeIPadLandscape] = CGSizeMake(1024, 768);
-    defaultCanvasSizes[kCCBCanvasSizeIPadPortrait] = CGSizeMake(768, 1024);
+    defaultCanvasSizes[kCCBCanvasSizeIPadLandscape] = CGSizeMake(512, 384);
+    defaultCanvasSizes[kCCBCanvasSizeIPadPortrait] = CGSizeMake(384, 512);
+    
+    // Fixed
+    defaultCanvasSizes[kCCBCanvasSizeFixedLandscape] = CGSizeMake(568, 384);
+    defaultCanvasSizes[kCCBCanvasSizeFixedPortrait] = CGSizeMake(384, 568);
     
     // Android
     defaultCanvasSizes[kCCBCanvasSizeAndroidXSmallLandscape] = CGSizeMake(320, 240);
@@ -481,8 +528,7 @@ static AppDelegate* sharedAppDelegate;
     //[self updateDefaultBrowser];
     
     // Load plug-ins
-    plugInManager = [PlugInManager sharedManager];
-    [plugInManager loadPlugIns];
+    [[PlugInManager sharedManager] loadPlugIns];
     
     // Update toolbar with plug-ins
     [self setupToolbar];
@@ -495,19 +541,17 @@ static AppDelegate* sharedAppDelegate;
     [self setupGUIWindow];
     [self setupProjectTilelessEditor];
     
-    [self setupPlayerConnection];
-    
     self.showGuides = YES;
     self.snapToGuides = YES;
     self.showStickyNotes = YES;
     
     [self.window makeKeyWindow];
+	_applicationLaunchComplete = YES;
     
     // Open files
-    if(delayOpenFiles)
+    if (delayOpenFiles)
 	{
 		[self openFiles:delayOpenFiles];
-		[delayOpenFiles release];
 		delayOpenFiles = nil;
 	}
     
@@ -579,7 +623,7 @@ static AppDelegate* sharedAppDelegate;
 
 - (void) addTab:(CCBDocument*)doc
 {
-    NSTabViewItem *newItem = [[[NSTabViewItem alloc] initWithIdentifier:doc] autorelease];
+    NSTabViewItem *newItem = [[NSTabViewItem alloc] initWithIdentifier:doc];
 	[newItem setLabel:[doc formattedName]];
 	[tabView addTabViewItem:newItem];
     [tabView selectTabViewItem:newItem]; // this is optional, but expected behavior
@@ -656,13 +700,18 @@ static AppDelegate* sharedAppDelegate;
     // Close the color picker
     [[NSColorPanel sharedColorPanel] close];
     
-    // Finish editing inspector
-    if (![[self window] makeFirstResponder:[self window]])
+    if([[self window] firstResponder] != sequenceHandler.outlineHierarchy)
     {
-        return;
+        // Finish editing inspector
+        if (![[self window] makeFirstResponder:[self window]])
+        {
+            return;
+        }
+
     }
     
-    // Remove any nodes that are part of sub ccb-files
+    
+    // Remove any nodes that are part of sub ccb-files OR any nodes that are Locked.
     NSMutableArray* mutableSelection = [NSMutableArray arrayWithArray: selection];
     for (int i = mutableSelection.count -1; i >= 0; i--)
     {
@@ -805,6 +854,8 @@ static BOOL hideAllToNextSeparator;
     
     // Create inspector
     InspectorValue* inspectorValue = [InspectorValue inspectorOfType:type withSelection:self.selectedNode andPropertyName:prop andDisplayName:displayName andExtra:e];
+	NSAssert3(inspectorValue, @"property '%@' (%@) not found in class %@", prop, type, NSStringFromClass([self.selectedNode class]));
+	
     lastInspectorValue.inspectorValueBelow = inspectorValue;
     lastInspectorValue = inspectorValue;
     inspectorValue.readOnly = readOnly;
@@ -952,7 +1003,7 @@ static BOOL hideAllToNextSeparator;
             if (!usesFlashSkew && [name isEqualToString:@"rotationY"]) continue;
             
             // Handle read only for animated properties
-            if ([self isDisabledProperty:name animatable:animated])
+            if ([self isDisabledProperty:name animatable:animated] || self.selectedNode.locked)
             {
                 readOnly = YES;
             }
@@ -1027,6 +1078,23 @@ static BOOL hideAllToNextSeparator;
     [inspectorCodeDocumentView setFrameSize:NSMakeSize([inspectorCodeScroll contentSize].width, paneCodeOffset)];
     
     [propertyInspectorHandler updateTemplates];
+    
+    NSString * privateFunction = [NSString stringWithFormat:@"%@%@%@", @"_setDefault",@"KeyView",@"Loop"];
+    SEL privateSelector = NSSelectorFromString(privateFunction);
+    
+    //Undocumented function that resets the KeyViewLoop.
+    if([inspectorDocumentView respondsToSelector:privateSelector])
+    {
+        [inspectorDocumentView performSelector:privateSelector withObject:nil];
+    }
+    
+    //Undocumented function that resets the KeyViewLoop.
+    if([inspectorCodeDocumentView respondsToSelector:privateSelector])
+    {
+        [inspectorCodeDocumentView performSelector:privateSelector withObject:nil];
+    }
+    
+
 }
 
 #pragma mark Populating menus
@@ -1045,7 +1113,7 @@ static BOOL hideAllToNextSeparator;
         NSString* keyEquivalent = @"";
         if (i < 10) keyEquivalent = [NSString stringWithFormat:@"%d",i+1];
         
-        NSMenuItem* item = [[[NSMenuItem alloc] initWithTitle:resolution.name action:@selector(menuResolution:) keyEquivalent:keyEquivalent] autorelease];
+        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:resolution.name action:@selector(menuResolution:) keyEquivalent:keyEquivalent];
         item.target = self;
         item.tag = i;
         
@@ -1078,11 +1146,11 @@ static BOOL hideAllToNextSeparator;
     int chainedId = sequenceHandler.currentSequence.chainedSequenceId;
     
     // Add dummy item
-    NSMenuItem* itemDummy = [[[NSMenuItem alloc] initWithTitle:@"Dummy" action:NULL keyEquivalent:@""] autorelease];
+    NSMenuItem* itemDummy = [[NSMenuItem alloc] initWithTitle:@"Dummy" action:NULL keyEquivalent:@""];
     [menuTimelineChained addItem:itemDummy];
     
     // Add empty option for chained seq
-    NSMenuItem* itemCh = [[[NSMenuItem alloc] initWithTitle: @"No Chained Timeline" action:@selector(menuSetChainedSequence:) keyEquivalent:@""] autorelease];
+    NSMenuItem* itemCh = [[NSMenuItem alloc] initWithTitle: @"No Chained Timeline" action:@selector(menuSetChainedSequence:) keyEquivalent:@""];
     itemCh.target = sequenceHandler;
     itemCh.tag = -1;
     if (chainedId == -1) [itemCh setState:NSOnState];
@@ -1094,14 +1162,14 @@ static BOOL hideAllToNextSeparator;
     for (SequencerSequence* seq in currentDocument.sequences)
     {
         // Add to sequence selector
-        NSMenuItem* item = [[[NSMenuItem alloc] initWithTitle:seq.name action:@selector(menuSetSequence:) keyEquivalent:@""] autorelease];
+        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:seq.name action:@selector(menuSetSequence:) keyEquivalent:@""];
         item.target = sequenceHandler;
         item.tag = seq.sequenceId;
         if (currentId == seq.sequenceId) [item setState:NSOnState];
         [menuTimeline addItem:item];
         
         // Add to chained sequence selector
-        itemCh = [[[NSMenuItem alloc] initWithTitle: seq.name action:@selector(menuSetChainedSequence:) keyEquivalent:@""] autorelease];
+        itemCh = [[NSMenuItem alloc] initWithTitle: seq.name action:@selector(menuSetChainedSequence:) keyEquivalent:@""];
         itemCh.target = sequenceHandler;
         itemCh.tag = seq.sequenceId;
         if (chainedId == seq.sequenceId) [itemCh setState:NSOnState];
@@ -1212,7 +1280,7 @@ static BOOL hideAllToNextSeparator;
 {
     [self.window makeKeyWindow];
     CocosScene* cs = [CocosScene cocosScene];
-    
+		
     if (![self hasOpenedDocument]) return;
     currentDocument.docData = [self docDataFromCurrentNodeGraph];
     currentDocument.stageZoom = [cs stageZoom];
@@ -1225,41 +1293,38 @@ static BOOL hideAllToNextSeparator;
     
     if (type == kCCBDocDimensionsTypeNode)
     {
-        if (projectSettings.designTarget == kCCBDesignTargetPhone ||
-            projectSettings.designTarget == kCCBDesignTargetAdaptive)
+        if (projectSettings.designTarget == kCCBDesignTargetFlexible)
         {
             [updatedResolutions addObject:[ResolutionSetting settingIPhone]];
-        }
-        if (projectSettings.designTarget == kCCBDesignTargetTablet ||
-            projectSettings.designTarget == kCCBDesignTargetAdaptive)
-        {
             [updatedResolutions addObject:[ResolutionSetting settingIPad]];
+        }
+        else
+        {
+            [updatedResolutions addObject:[ResolutionSetting settingFixed]];
         }
     }
     else if (type == kCCBDocDimensionsTypeLayer)
     {
         ResolutionSetting* settingDefault = [resolutions objectAtIndex:0];
         
-        if (projectSettings.designTarget == kCCBDesignTargetPhone)
+        if (projectSettings.designTarget == kCCBDesignTargetFixed)
         {
-            settingDefault.name = @"Phone";
+            settingDefault.name = @"Fixed";
+            settingDefault.scale = 2;
+            settingDefault.ext = @"tablet phonehd";
             [updatedResolutions addObject:settingDefault];
         }
-        else if (projectSettings.designTarget == kCCBDesignTargetTablet)
-        {
-            settingDefault.name = @"Tablet";
-            [updatedResolutions addObject:settingDefault];
-        }
-        else if (projectSettings.designTarget == kCCBDesignTargetAdaptive)
+        else if (projectSettings.designTarget == kCCBDesignTargetFlexible)
         {
             settingDefault.name = @"Phone";
+            settingDefault.scale = 1;
+            settingDefault.ext = @"phone";
             [updatedResolutions addObject:settingDefault];
             
             ResolutionSetting* settingTablet = [settingDefault copy];
             settingTablet.name = @"Tablet";
-            settingTablet.width *= projectSettings.tabletPositionScaleFactor;
-            settingTablet.height *= projectSettings.tabletPositionScaleFactor;
             settingTablet.scale = projectSettings.tabletPositionScaleFactor;
+            settingTablet.ext = @"tablet phonehd";
             [updatedResolutions addObject:settingTablet];
         }
     }
@@ -1268,19 +1333,11 @@ static BOOL hideAllToNextSeparator;
         if (projectSettings.defaultOrientation == kCCBOrientationLandscape)
         {
             // Full screen landscape
-            if (projectSettings.designTarget == kCCBDesignTargetPhone)
+            if (projectSettings.designTarget == kCCBDesignTargetFixed)
             {
-                [updatedResolutions addObject:[ResolutionSetting settingIPhone5Landscape]];
-                if (projectSettings.deviceScaling == kCCBDeviceScalingStretchTallSide)
-                {
-                    [updatedResolutions addObject:[ResolutionSetting settingIPhoneLandscape]];
-                }
+                [updatedResolutions addObject:[ResolutionSetting settingFixedLandscape]];
             }
-            else if (projectSettings.designTarget == kCCBDesignTargetTablet)
-            {
-                [updatedResolutions addObject:[ResolutionSetting settingIPadLandscape]];
-            }
-            else if (projectSettings.designTarget == kCCBDesignTargetAdaptive)
+            else if (projectSettings.designTarget == kCCBDesignTargetFlexible)
             {
                 [updatedResolutions addObject:[ResolutionSetting settingIPhone5Landscape]];
                 [updatedResolutions addObject:[ResolutionSetting settingIPadLandscape]];
@@ -1290,19 +1347,11 @@ static BOOL hideAllToNextSeparator;
         else
         {
             // Full screen portrait
-            if (projectSettings.designTarget == kCCBDesignTargetPhone)
+            if (projectSettings.designTarget == kCCBDesignTargetFixed)
             {
-                [updatedResolutions addObject:[ResolutionSetting settingIPhone5Portrait]];
-                if (projectSettings.deviceScaling == kCCBDeviceScalingStretchTallSide)
-                {
-                    [updatedResolutions addObject:[ResolutionSetting settingIPhonePortrait]];
-                }
+                [updatedResolutions addObject:[ResolutionSetting settingFixedPortrait]];
             }
-            else if (projectSettings.designTarget == kCCBDesignTargetTablet)
-            {
-                [updatedResolutions addObject:[ResolutionSetting settingIPadPortrait]];
-            }
-            else if (projectSettings.designTarget == kCCBDesignTargetAdaptive)
+            else if (projectSettings.designTarget == kCCBDesignTargetFlexible)
             {
                 [updatedResolutions addObject:[ResolutionSetting settingIPhone5Portrait]];
                 [updatedResolutions addObject:[ResolutionSetting settingIPadPortrait]];
@@ -1340,7 +1389,7 @@ static BOOL hideAllToNextSeparator;
         NSMutableArray* resolutions = [NSMutableArray array];
         for (id serRes in serializedResolutions)
         {
-            ResolutionSetting* resolution = [[[ResolutionSetting alloc] initWithSerialization:serRes] autorelease];
+            ResolutionSetting* resolution = [[ResolutionSetting alloc] initWithSerialization:serRes];
             [resolutions addObject:resolution];
         }
         
@@ -1351,16 +1400,15 @@ static BOOL hideAllToNextSeparator;
         currentResolution = clampf(currentResolution, 0, resolutions.count - 1);
         ResolutionSetting* resolution = [resolutions objectAtIndex:currentResolution];
         
-        
-        
-        // Update CocosScene
-        [[CocosScene cocosScene] setStageSize:CGSizeMake(resolution.width, resolution.height) centeredOrigin: centered];
-        
         // Save in current document
         currentDocument.resolutions = resolutions;
         currentDocument.currentResolution = currentResolution;
         
         [self updatePositionScaleFactor];
+        
+        // Update CocosScene
+        [[CocosScene cocosScene] setStageSize:CGSizeMake(resolution.width, resolution.height) centeredOrigin: centered];
+        
     }
     else
     {
@@ -1371,7 +1419,7 @@ static BOOL hideAllToNextSeparator;
         [[CocosScene cocosScene] setStageSize:CGSizeMake(stageW, stageH) centeredOrigin:centered];
         
         // Setup a basic resolution and attach it to the current document
-        ResolutionSetting* resolution = [[[ResolutionSetting alloc] init] autorelease];
+        ResolutionSetting* resolution = [[ResolutionSetting alloc] init];
         resolution.width = stageW;
         resolution.height = stageH;
         resolution.centeredOrigin = centered;
@@ -1400,7 +1448,6 @@ static BOOL hideAllToNextSeparator;
         {
             SequencerSequence* seq = [[SequencerSequence alloc] initWithSerialization:serSeq];
             [sequences addObject:seq];
-            [seq release];
             
             if (seq.sequenceId == currentSequenceId)
             {
@@ -1421,7 +1468,6 @@ static BOOL hideAllToNextSeparator;
         seq.sequenceId = 0;
         seq.autoPlay = YES;
         [sequences addObject:seq];
-        [seq release];
     
         currentDocument.sequences = sequences;
         sequenceHandler.currentSequence = seq;
@@ -1590,18 +1636,18 @@ static BOOL hideAllToNextSeparator;
 
 - (BOOL) createProject:(NSString*) fileName
 {
-    CCBProjCreator* creator = [[[CCBProjCreator alloc] init] autorelease];
+    CCBProjCreator* creator = [[CCBProjCreator alloc] init];
     return [creator createDefaultProjectAtPath:fileName];
 }
 
 - (void) updateResourcePathsFromProjectSettings
 {
-    [resManager removeAllDirectories];
+    [[ResourceManager sharedManager] removeAllDirectories];
     
     // Setup links to directories
     for (NSString* dir in [projectSettings absoluteResourcePaths])
     {
-        [resManager addDirectory:dir];
+        [[ResourceManager sharedManager] addDirectory:dir];
     }
     [[ResourceManager sharedManager] setActiveDirectories:[projectSettings absoluteResourcePaths]];
 }
@@ -1624,16 +1670,11 @@ static BOOL hideAllToNextSeparator;
         }
     }
     
-    [[JavaScriptAutoCompleteHandler sharedAutoCompleteHandler] removeLocalFiles];
-    
     [window setTitle:@"SpriteBuilder"];
-
-    // Stop local web server
-    [[CCBHTTPServer sharedHTTPServer] stop];
     
     // Remove resource paths
     self.projectSettings = NULL;
-    [resManager removeAllDirectories];
+    [[ResourceManager sharedManager] removeAllDirectories];
     
     // Remove language file
     localizationEditorHandler.managedFile = NULL;
@@ -1650,6 +1691,11 @@ static BOOL hideAllToNextSeparator;
     // Add to recent list of opened documents
     [[NSDocumentController sharedDocumentController] noteNewRecentDocumentURL:[NSURL fileURLWithPath:fileName]];
     
+    // Convert folder to actual project file
+    NSString* projName = [[fileName lastPathComponent] stringByDeletingPathExtension];
+    fileName = [[fileName stringByAppendingPathComponent:projName] stringByAppendingPathExtension:@"ccbproj"];
+    
+    // Load the project file
     NSMutableDictionary* projectDict = [NSMutableDictionary dictionaryWithContentsOfFile:fileName];
     if (!projectDict)
     {
@@ -1657,7 +1703,7 @@ static BOOL hideAllToNextSeparator;
         return NO;
     }
     
-    ProjectSettings* project = [[[ProjectSettings alloc] initWithSerialization:projectDict] autorelease];
+    ProjectSettings* project = [[ProjectSettings alloc] initWithSerialization:projectDict];
     if (!project)
     {
         [self modalDialogTitle:@"Invalid Project File" message:@"Failed to open the project. File is invalid or is created with a newer version of SpriteBuilder."];
@@ -1674,22 +1720,11 @@ static BOOL hideAllToNextSeparator;
     if (!success) return NO;
     
     // Load or create language file
-    NSString* langFile = [resManager.mainActiveDirectoryPath stringByAppendingPathComponent:@"Strings.ccbLang"];
+    NSString* langFile = [[ResourceManager sharedManager].mainActiveDirectoryPath stringByAppendingPathComponent:@"Strings.ccbLang"];
     localizationEditorHandler.managedFile = langFile;
-    
-    // Load autocompletions for all JS files
-    NSArray* jsFiles = [CCBFileUtil filesInResourcePathsWithExtension:@"js"];
-    for (NSString* jsFile in jsFiles)
-    {
-        [[JavaScriptAutoCompleteHandler sharedAutoCompleteHandler] loadLocalFile:[resManager toAbsolutePath:jsFile]];
-    }
     
     // Update the title of the main window
     [window setTitle:[NSString stringWithFormat:@"SpriteBuilder - %@", [fileName lastPathComponent]]];
-
-    // Start local web server
-    NSString* docRoot = [projectSettings.publishDirectoryHTML5 absolutePathFromBaseDirPath:[projectSettings.projectPath stringByDeletingLastPathComponent]];
-    [[CCBHTTPServer sharedHTTPServer] start:docRoot];
     
     // Open ccb file for project if there is only one
     NSArray* resPaths = project.absoluteResourcePaths;
@@ -1741,7 +1776,7 @@ static BOOL hideAllToNextSeparator;
     
     NSMutableDictionary* doc = [NSMutableDictionary dictionaryWithContentsOfFile:fileName];
     
-    CCBDocument* newDoc = [[[CCBDocument alloc] init] autorelease];
+    CCBDocument* newDoc = [[CCBDocument alloc] init];
     newDoc.fileName = fileName;
     newDoc.docData = doc;
     newDoc.exportPath = [doc objectForKey:@"exportPath"];
@@ -1789,7 +1824,7 @@ static BOOL hideAllToNextSeparator;
     // Reset to first frame in first timeline in first resolution
     float currentTime = sequenceHandler.currentSequence.timelinePosition;
     int currentResolution = currentDocument.currentResolution;
-    SequencerSequence* currentSeq = [sequenceHandler.currentSequence retain];
+    SequencerSequence* currentSeq = sequenceHandler.currentSequence;
     
     currentDocument.currentResolution = 0;
     sequenceHandler.currentSequence = [currentDocument.sequences objectAtIndex:0];
@@ -1806,7 +1841,6 @@ static BOOL hideAllToNextSeparator;
     [self reloadResources];
     //[PositionPropertySetter refreshAllPositions];
     sequenceHandler.currentSequence.timelinePosition = currentTime;
-    [currentSeq release];
     
     [projectOutlineHandler updateSelectionPreview];
 }
@@ -1829,14 +1863,6 @@ static BOOL hideAllToNextSeparator;
     }
 }
 
-- (void) newJSFile:(NSString*) fileName
-{
-    NSData* jsData = [@"" dataUsingEncoding:NSUTF8StringEncoding];
-    [jsData writeToFile:fileName atomically:YES];
-    
-    [self openJSFile:fileName];
-}
-
 - (void) newFile:(NSString*) fileName type:(int)type resolutions: (NSMutableArray*) resolutions;
 {
     BOOL centered = NO;
@@ -1853,7 +1879,7 @@ static BOOL hideAllToNextSeparator;
         type == kCCBNewDocTypeLayer) class = @"CCNode";
     else if (type == kCCBNewDocTypeScene) class = @"CCNode";
     else if (type == kCCBNewDocTypeSprite) class = @"CCSprite";
-    else if (type == kCCBNewDocTypeParticleSystem) class = @"CCParticleSystemQuad";
+    else if (type == kCCBNewDocTypeParticleSystem) class = @"CCParticleSystem";
     
     resolutions = [self updateResolutions:resolutions forDocDimensionType:docDimType];
     
@@ -1890,19 +1916,19 @@ static BOOL hideAllToNextSeparator;
     if (type == kCCBNewDocTypeScene)
     {
         // Set default contentSize to 100% x 100% for scenes
-        [PositionPropertySetter setSize:NSMakeSize(1, 1) type:CCContentSizeTypeNormalized forNode:[CocosScene cocosScene].rootNode prop:@"contentSize"];
+        [PositionPropertySetter setSize:NSMakeSize(1, 1) type:CCSizeTypeNormalized forNode:[CocosScene cocosScene].rootNode prop:@"contentSize"];
     }
     else if (type == kCCBNewDocTypeLayer)
     {
         // Set contentSize to w x h in scaled coordinates for layers
-        [PositionPropertySetter setSize:NSMakeSize(resolution.width, resolution.height) type:CCContentSizeTypeScaled forNode:[CocosScene cocosScene].rootNode prop:@"contentSize"];
+        [PositionPropertySetter setSize:NSMakeSize(resolution.width, resolution.height) type:CCSizeTypePoints forNode:[CocosScene cocosScene].rootNode prop:@"contentSize"];
     }
     
     [outlineHierarchy reloadData];
     [sequenceHandler updateOutlineViewSelection];
     [self updateInspectorFromSelection];
     
-    self.currentDocument = [[[CCBDocument alloc] init] autorelease];
+    self.currentDocument = [[CCBDocument alloc] init];
     self.currentDocument.resolutions = resolutions;
     self.currentDocument.currentResolution = 0;
     self.currentDocument.docDimensionsType = docDimType;
@@ -1915,7 +1941,7 @@ static BOOL hideAllToNextSeparator;
     // Setup a default timeline
     NSMutableArray* sequences = [NSMutableArray array];
     
-    SequencerSequence* seq = [[[SequencerSequence alloc] init] autorelease];
+    SequencerSequence* seq = [[SequencerSequence alloc] init];
     seq.name = @"Default Timeline";
     seq.sequenceId = 0;
     seq.autoPlay = YES;
@@ -1963,6 +1989,7 @@ static BOOL hideAllToNextSeparator;
 {
 	for( NSString* filename in filenames )
 	{
+        /*
 		if( [filename hasSuffix:@".ccb"] )
 		{
 			NSString* folderPathToSearch = [filename stringByDeletingLastPathComponent];
@@ -1972,8 +1999,8 @@ static BOOL hideAllToNextSeparator;
 				[self openProject:projectFile];
 				[self openFile:filename];
 			}
-		}
-		else if ([filename hasSuffix:@".ccbproj"])
+		}*/
+        if ([filename hasSuffix:@".spritebuilder"])
 		{
 			[self openProject:filename];		
 		}
@@ -1982,48 +2009,16 @@ static BOOL hideAllToNextSeparator;
 
 - (void)application:(NSApplication *)sender openFiles:(NSArray *)filenames
 {
-	// if resManager isn't initialized wait for it to initialize before opening assets.	
-	if(!resManager)
+	// must wait for resource manager & rest of app to have completed the launch process before opening file(s)
+	if (_applicationLaunchComplete == NO)
 	{
-		NSAssert( delayOpenFiles == NULL, @"This shouldn't be set to anything since this value will only get applied once.");
+		NSAssert(delayOpenFiles == NULL, @"This shouldn't be set to anything since this value will only get applied once.");
 		delayOpenFiles = [[NSMutableArray alloc] initWithArray:filenames];
 	}
 	else 
 	{
 		[self openFiles:filenames];
 	}
-}
-
-- (void) openJSFile:(NSString*) fileName
-{
-    [self openJSFile:fileName highlightLine:0];
-}
-
-- (void) openJSFile:(NSString*) fileName highlightLine:(int)line
-{
-    NSURL* docURL = [[[NSURL alloc] initFileURLWithPath:fileName] autorelease];
-    
-    JavaScriptDocument* jsDoc = [[NSDocumentController sharedDocumentController] documentForURL:docURL];
-    
-    if (!jsDoc)
-    {
-        jsDoc = [[[JavaScriptDocument alloc] initWithContentsOfURL:docURL ofType:@"JavaScript" error:NULL] autorelease];
-        [[NSDocumentController sharedDocumentController] addDocument:jsDoc];
-        [jsDoc makeWindowControllers];
-    }
-    
-    [jsDoc showWindows];
-    [jsDoc setHighlightedLine:line];
-}
-
-- (void) resetJSFilesLineHighlight
-{
-    NSArray* jsDocs = [[NSDocumentController sharedDocumentController] documents];
-    for (int i = 0; i < [jsDocs count]; i++)
-    {
-        JavaScriptDocument* doc = [jsDocs objectAtIndex:i];
-        [doc setHighlightedLine:0];
-    }
 }
 
 - (IBAction)menuResetSpriteBuilder:(id)sender
@@ -2114,6 +2109,7 @@ static BOOL hideAllToNextSeparator;
     {
         // Add at end of array
         [parent addChild:obj z:[parent.children count]];
+        
     }
     else
     {
@@ -2126,6 +2122,11 @@ static BOOL hideAllToNextSeparator;
         }
         [parent addChild:obj z:index];
         [parent sortAllChildren];
+    }
+    
+    if(parent.hidden)
+    {
+        obj.hidden = YES;
     }
     
     [outlineHierarchy reloadData];
@@ -2152,8 +2153,16 @@ static BOOL hideAllToNextSeparator;
     if (asChild)
     {
         parent = self.selectedNode;
-        if (!parent) self.selectedNodes = [NSArray arrayWithObject: g.rootNode];
+        
+        if(!parent && !g.rootNode)
+            return NO;
+        
+        if (!parent)
+        {
+            self.selectedNodes = [NSArray arrayWithObject: g.rootNode];
+        }
     }
+    
     
     BOOL success = [self addCCObject:obj toParent:parent];
     
@@ -2169,7 +2178,7 @@ static BOOL hideAllToNextSeparator;
 - (CCNode*) addPlugInNodeNamed:(NSString*)name asChild:(BOOL) asChild
 {
     self.errorDescription = NULL;
-    CCNode* node = [plugInManager createDefaultNodeOfType:name];
+    CCNode* node = [[PlugInManager sharedManager] createDefaultNodeOfType:name];
     BOOL success = [self addCCObject:node asChild:asChild];
     
     if (!success && self.errorDescription)
@@ -2195,7 +2204,7 @@ static BOOL hideAllToNextSeparator;
     if (class && prop)
     {
         // Create the node
-        CCNode* node = [plugInManager createDefaultNodeOfType:class];
+        CCNode* node = [[PlugInManager sharedManager] createDefaultNodeOfType:class];
         
         // Round position
         pt.x = roundf(pt.x);
@@ -2267,7 +2276,7 @@ static BOOL hideAllToNextSeparator;
         pt = [parent convertToNodeSpace:pt];
     }
     
-    CCNode* node = [plugInManager createDefaultNodeOfType:@"CCBFile"];
+    CCNode* node = [[PlugInManager sharedManager] createDefaultNodeOfType:@"CCBFile"];
     [NodeGraphPropertySetter setNodeGraphForNode:node andProperty:@"ccbFile" withFile:ccbFile parentSize:parent.contentSize];
     [PositionPropertySetter setPosition:NSPointFromCGPoint(pt) type:CCPositionTypePoints forNode:node prop:@"position"];
     [self addCCObject:node toParent:parent];
@@ -2276,8 +2285,20 @@ static BOOL hideAllToNextSeparator;
 
 - (IBAction) copy:(id) sender
 {
-    // Copy keyframes
+    //Copy warnings.
+    if([[self window] firstResponder] == _warningTableView)
+    {
+        CCBWarning * warning = projectSettings.lastWarnings.warnings[_warningTableView.selectedRow];
+        NSString * stringToWrite = warning.description;
+        NSPasteboard* cb = [NSPasteboard generalPasteboard];
+        
+        [cb declareTypes:[NSArray arrayWithObject:NSStringPboardType] owner:nil];
+        [cb setString:stringToWrite forType:NSStringPboardType];
+        return;
+    }
+
     
+    // Copy keyframes
     NSArray* keyframes = [sequenceHandler selectedKeyframesForCurrentSequence];
     if ([keyframes count] > 0)
     {
@@ -2291,7 +2312,7 @@ static BOOL hideAllToNextSeparator;
         {
             SequencerKeyframe* keyframe = [keyframes objectAtIndex:i];
             
-            NSValue* seqVal = [NSValue valueWithPointer:keyframe.parent];
+            NSValue* seqVal = [NSValue valueWithPointer:(__bridge const void *)(keyframe.parent)];
             if (![seqsSet containsObject:seqVal])
             {
                 NSString* propName = keyframe.name;
@@ -2327,10 +2348,10 @@ static BOOL hideAllToNextSeparator;
             return;
         }
         
-        NSString* clipType = @"com.cocosbuilder.keyframes";
+        NSString* clipType = kClipboardKeyFrames;
         if (hasChannelKeyframes)
         {
-            clipType = @"com.cocosbuilder.channelkeyframes";
+            clipType = kClipboardChannelKeyframes;
         }
         
         // Serialize keyframe
@@ -2346,6 +2367,7 @@ static BOOL hideAllToNextSeparator;
         
         return;
     }
+    
     
     // Copy node
     if (!self.selectedNode) return;
@@ -2384,11 +2406,11 @@ static BOOL hideAllToNextSeparator;
     
     // Paste keyframes
     NSPasteboard* cb = [NSPasteboard generalPasteboard];
-    NSString* type = [cb availableTypeFromArray:[NSArray arrayWithObjects:@"com.cocosbuilder.keyframes", @"com.cocosbuilder.channelkeyframes", nil]];
+    NSString* type = [cb availableTypeFromArray:[NSArray arrayWithObjects:kClipboardKeyFrames, kClipboardChannelKeyframes, nil]];
     
     if (type)
     {
-        if (!self.selectedNode && [type isEqualToString:@"com.cocosbuilder.keyframes"])
+        if (!self.selectedNode && [type isEqualToString:kClipboardKeyFrames])
         {
             [self modalDialogTitle:@"Paste Failed" message:@"You need to select a node to paste keyframes"];
             return;
@@ -2403,7 +2425,7 @@ static BOOL hideAllToNextSeparator;
         float firstTime = MAXFLOAT;
         for (id serKeyframe in serKeyframes)
         {
-            SequencerKeyframe* keyframe = [[[SequencerKeyframe alloc] initWithSerialization:serKeyframe] autorelease];
+            SequencerKeyframe* keyframe = [[SequencerKeyframe alloc] initWithSerialization:serKeyframe];
             if (keyframe.time < firstTime)
             {
                 firstTime = keyframe.time;
@@ -2420,11 +2442,11 @@ static BOOL hideAllToNextSeparator;
             keyframe.time = [seq alignTimeToResolution:keyframe.time - firstTime + seq.timelinePosition];
             
             // Add the keyframe
-            if ([type isEqualToString:@"com.cocosbuilder.keyframes"])
+            if ([type isEqualToString:kClipboardKeyFrames])
             {
                 [self.selectedNode addKeyframe:keyframe forProperty:keyframe.name atTime:keyframe.time sequenceId:seq.sequenceId];
             }
-            else if ([type isEqualToString:@"com.cocosbuilder.channelkeyframes"])
+            else if ([type isEqualToString:kClipboardChannelKeyframes])
             {
                 if (keyframe.type == kCCBKeyframeTypeCallbacks)
                 {
@@ -2437,6 +2459,8 @@ static BOOL hideAllToNextSeparator;
                 [keyframe.parent deleteKeyframesAfterTime:seq.timelineLength];
                 [[SequencerHandler sharedHandler] redrawTimeline];
             }
+
+            [[SequencerHandler sharedHandler] deleteDuplicateKeyframesForCurrentSequence];
         }
         
     }
@@ -2509,6 +2533,9 @@ static BOOL hideAllToNextSeparator;
     
     for (CCNode* selectedNode in self.selectedNodes)
     {
+        if(selectedNode.locked)
+            continue;
+        
         [self saveUndoStateWillChangeProperty:@"position"];
         
         // Get and update absolute position
@@ -2565,7 +2592,7 @@ static BOOL hideAllToNextSeparator;
     
     NSSavePanel* saveDlg = [NSSavePanel savePanel];
     [saveDlg setAllowedFileTypes:[NSArray arrayWithObject:@"ccb"]];
-    SavePanelLimiter* limter = [[SavePanelLimiter alloc] initWithPanel:saveDlg resManager:resManager];
+    SavePanelLimiter* limter = [[SavePanelLimiter alloc] initWithPanel:saveDlg];
     
     [saveDlg beginSheetModalForWindow:window completionHandler:^(NSInteger result){
         if (result == NSOKButton)
@@ -2587,12 +2614,17 @@ static BOOL hideAllToNextSeparator;
                 [[[CCDirector sharedDirector] view] unlockOpenGLContext];
             });
         }
-        [limter release];
     }];
 }
 
 - (IBAction) saveDocument:(id)sender
 {
+    // Finish editing inspector
+    if (![[self window] makeFirstResponder:[self window]])
+    {
+        return;
+    }
+    
     if (currentDocument && currentDocument.fileName)
     {
         [self saveFile:currentDocument.fileName];
@@ -2632,6 +2664,7 @@ static BOOL hideAllToNextSeparator;
     [self switchToDocument:oldCurDoc forceReload:NO];
 }
 
+
 - (void) publishAndRun:(BOOL)run runInBrowser:(NSString *)browser
 {
     if (!projectSettings.publishEnabledAndroid
@@ -2642,13 +2675,7 @@ static BOOL hideAllToNextSeparator;
         return;
     }
     
-    if (run && !browser && ![[PlayerConnection sharedPlayerConnection] connected])
-    {
-        [self modalDialogTitle:@"No Player Connected" message:@"There is no Player connected to SpriteBuilder. Make sure that a player is running and that it has the same pairing number as SpriteBuilder."];
-        return;
-    }
-    
-    CCBWarnings* warnings = [[[CCBWarnings alloc] init] autorelease];
+    CCBWarnings* warnings = [[CCBWarnings alloc] init];
     warnings.warningsDescription = @"Publisher Warnings";
     
     // Setup publisher, publisher is released in publisher:finishedWithWarnings:
@@ -2696,45 +2723,13 @@ static BOOL hideAllToNextSeparator;
     // Update warnings button in toolbar
     [self updateWarningsButton];
     
-    if (warnings.warnings.count) [self pressedPublishTB:NULL];
-    
-    // Run in Browser
-    if (publisher.runAfterPublishing && publisher.browser)
+    if (warnings.warnings.count)
     {
-        [[CCBHTTPServer sharedHTTPServer] openBrowser:publisher.browser];
-        //[self updateDefaultBrowser];
+        [projectViewTabs selectBarButtonIndex:3];
     }
     
-    // Run in CocosPlayer
-    if (publisher.runAfterPublishing && !publisher.browser)
-    {
-        [self runProject:self];
-    }
     
-    [publisher release];
-}
-
-- (IBAction)openCocosPlayerConsole:(id)sender
-{
-    if (!playerConsoleWindow)
-    {
-        playerConsoleWindow = [[PlayerConsoleWindow alloc] initWithWindowNibName:@"PlayerConsoleWindow"];
-    }
-    [playerConsoleWindow.window makeKeyAndOrderFront:self];
-}
-
-- (IBAction)runProject:(id)sender
-{
-    // Open CocosPlayer console
-    [self openCocosPlayerConsole:sender];
     
-    [playerConsoleWindow cleanConsole];
-    
-    if ([[PlayerConnection sharedPlayerConnection] connected])
-    {
-        [[PlayerConnection sharedPlayerConnection] sendProjectSettings:projectSettings];
-        [[PlayerConnection sharedPlayerConnection] sendRunCommand];
-    }
 }
 
 - (IBAction) menuPublishProject:(id)sender
@@ -2804,7 +2799,7 @@ static BOOL hideAllToNextSeparator;
 {
     if (!projectSettings) return;
     
-    PublishSettingsWindow* wc = [[[PublishSettingsWindow alloc] initWithWindowNibName:@"PublishSettingsWindow"] autorelease];
+    PublishSettingsWindow* wc = [[PublishSettingsWindow alloc] initWithWindowNibName:@"PublishSettingsWindow"];
     wc.projectSettings = self.projectSettings;
     
     int success = [wc runModalSheetForWindow:window];
@@ -2814,6 +2809,7 @@ static BOOL hideAllToNextSeparator;
         [self updateResourcePathsFromProjectSettings];
         [self menuCleanCacheDirectories:sender];
         [self reloadResources];
+        [self setResolution:0];
     }
 }
 
@@ -2822,7 +2818,7 @@ static BOOL hideAllToNextSeparator;
     // Create the File Open Dialog
     NSOpenPanel* openDlg = [NSOpenPanel openPanel];
     [openDlg setCanChooseFiles:YES];
-    [openDlg setAllowedFileTypes:[NSArray arrayWithObject:@"ccbproj"]];
+    [openDlg setAllowedFileTypes:[NSArray arrayWithObject:@"spritebuilder"]];
     
     [openDlg beginSheetModalForWindow:window completionHandler:^(NSInteger result){
         if (result == NSOKButton)
@@ -2849,27 +2845,35 @@ static BOOL hideAllToNextSeparator;
 {
     // Accepted create document, prompt for place for file
     NSSavePanel* saveDlg = [NSSavePanel savePanel];
-    //[saveDlg setAllowedFileTypes:[NSArray arrayWithObject:@""]];
+    [saveDlg setAllowedFileTypes:[NSArray arrayWithObject:@"spritebuilder"]];
     //saveDlg.message = @"Save your project file in the same directory as your projects resources.";
     
     [saveDlg beginSheetModalForWindow:window completionHandler:^(NSInteger result){
         if (result == NSOKButton)
         {
             NSString* fileName = [[saveDlg URL] path];
+            NSString* fileNameRaw = [fileName stringByDeletingPathExtension];
             
             // Check validity of file name
             NSCharacterSet* invalidChars = [[NSCharacterSet alphanumericCharacterSet] invertedSet];
-            if ([[fileName lastPathComponent] rangeOfCharacterFromSet:invalidChars].location == NSNotFound)
+            if ([[fileNameRaw lastPathComponent] rangeOfCharacterFromSet:invalidChars].location == NSNotFound)
             {
+                // Create directory
                 [[NSFileManager defaultManager] createDirectoryAtPath:fileName withIntermediateDirectories:NO attributes:NULL error:NULL];
-                NSString* projectName = [fileName lastPathComponent];
+                
+                // Set icon of created directory
+                NSImage* folderIcon = [NSImage imageNamed:@"Folder.icns"];
+                [[NSWorkspace sharedWorkspace] setIcon:folderIcon forFile:fileName options:NULL];
+                
+                // Create project file
+                NSString* projectName = [fileNameRaw lastPathComponent];
                 fileName = [[fileName stringByAppendingPathComponent:projectName] stringByAppendingPathExtension:@"ccbproj"];
                 
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0),
                                dispatch_get_current_queue(), ^{
                                    if ([self createProject: fileName])
                                    {
-                                       [self openProject:fileName];
+                                       [self openProject:[fileNameRaw stringByAppendingPathExtension:@"spritebuilder"]];
                                    }
                                    else
                                    {
@@ -2885,33 +2889,47 @@ static BOOL hideAllToNextSeparator;
     }];
 }
 
-- (IBAction) newJSDocument:(id)sender
-{
-    NSLog(@"New JS Doc");
-    
-    NSSavePanel* saveDlg = [NSSavePanel savePanel];
-    [saveDlg setAllowedFileTypes:[NSArray arrayWithObject:@"js"]];
-    
-    SavePanelLimiter* limiter = [[SavePanelLimiter alloc] initWithPanel:saveDlg resManager:resManager];
-    
-    [saveDlg beginSheetModalForWindow:window completionHandler:^(NSInteger result) {
-        if (result == NSOKButton)
-        {
-            [self newJSFile:[[saveDlg URL] path]];
-        }
-        [limiter release];
-    }];
-}
-
 - (IBAction) newFolder:(id)sender
 {
     NSFileManager* fm = [NSFileManager defaultManager];
     
     // Find directory
     NSArray* dirs = [ResourceManager sharedManager].activeDirectories;
-    if (dirs.count == 0) return;
+    if (dirs.count == 0)
+        return;
+    
+    
     RMDirectory* dir = [dirs objectAtIndex:0];
     NSString* dirPath = dir.dirPath;
+
+    int selectedRow = [sender tag];
+
+    if(selectedRow != -1)
+    {
+        if (selectedRow >= 0 && projectSettings)
+        {
+            RMResource* res = [outlineProject itemAtRow:selectedRow];
+            
+            if([res isKindOfClass:[RMDirectory class]])
+            {
+                RMDirectory * directoryResource = (RMDirectory *)res;
+                dirPath = directoryResource.dirPath;
+                
+            }
+            else
+            {
+                
+                if(res.type == kCCBResTypeDirectory)
+                {
+                    dirPath = res.filePath;
+                }
+                else
+                {
+                    dirPath = [res.filePath stringByDeletingLastPathComponent];
+                }
+            }
+        }
+    }
     
     int attempt = 0;
     NSString* newDirPath = NULL;
@@ -2934,12 +2952,11 @@ static BOOL hideAllToNextSeparator;
     [fm createDirectoryAtPath:newDirPath withIntermediateDirectories:YES attributes:NULL error:NULL];
     [[ResourceManager sharedManager] reloadAllResources];
     
-    if (dirs.count > 1)
-    {
-        [outlineProject expandItem:[dirs objectAtIndex:0]];
-    }
+    RMResource * res = [[ResourceManager sharedManager] resourceForPath:newDirPath];
     
-    RMResource* res = [[ResourceManager sharedManager] resourceForPath:newDirPath];
+    id parentResource = [[ResourceManager sharedManager] resourceForPath:dirPath];
+    [outlineProject expandItem:parentResource];
+    
     [outlineProject editColumn:0 row:[outlineProject rowForItem:res] withEvent:sender select:YES];
 }
 
@@ -2955,7 +2972,39 @@ static BOOL hideAllToNextSeparator;
     
     if (acceptedModal)
     {
-        NSString* filePath = [[[[ResourceManager sharedManager].activeDirectories objectAtIndex:0] dirPath] stringByAppendingPathComponent:wc.documentName];
+        NSString* dirPath = [[[ResourceManager sharedManager].activeDirectories objectAtIndex:0] dirPath];
+        
+        int selectedRow = [sender tag];
+
+        if(selectedRow != -1)
+        {
+            if (selectedRow >= 0 && projectSettings)
+            {
+                RMResource* res = [outlineProject itemAtRow:selectedRow];
+                
+                if([res isKindOfClass:[RMDirectory class]])
+                {
+                    RMDirectory * directoryResource = (RMDirectory *)res;
+                    dirPath = directoryResource.dirPath;
+                }
+                else
+                {
+                    
+                    if(res.type == kCCBResTypeDirectory)
+                    {
+                        dirPath = res.filePath;
+                    }
+                    else
+                    {
+                        dirPath = [res.filePath stringByDeletingLastPathComponent];
+                    }
+                }
+            }
+        }
+        
+        NSString* filePath = [dirPath stringByAppendingPathComponent:wc.documentName];
+        
+        
         if (![[filePath pathExtension] isEqualToString:@"ccb"])
         {
             filePath = [filePath stringByAppendingPathExtension:@"ccb"];
@@ -2982,13 +3031,13 @@ static BOOL hideAllToNextSeparator;
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0),
                            dispatch_get_current_queue(), ^{
                                [self newFile:filePath type:type resolutions:resolutions];
+                               id parentResource = [[ResourceManager sharedManager] resourceForPath:dirPath];
+                               [outlineProject expandItem:parentResource];
                            });
-            [wc release];
         }
     }
     else
     {
-        [wc release];
     }
 }
 
@@ -3057,8 +3106,21 @@ static BOOL hideAllToNextSeparator;
 - (void) updatePositionScaleFactor
 {
     ResolutionSetting* res = [currentDocument.resolutions objectAtIndex:currentDocument.currentResolution];
+	
+	if([CCDirector sharedDirector].contentScaleFactor != res.scale)
+    {
+        [[CCTextureCache sharedTextureCache] removeAllTextures];
+        [[CCSpriteFrameCache sharedSpriteFrameCache] removeSpriteFrames];
+        FNTConfigRemoveCache();
+    }
     
-    [CCDirector sharedDirector].positionScaleFactor = res.scale;
+    
+    [CCDirector sharedDirector].contentScaleFactor = res.scale;
+    [CCDirector sharedDirector].UIScaleFactor = 1.0/res.scale;
+    [[CCFileUtils sharedFileUtils] setMacContentScaleFactor:res.scale];
+				
+    // Setup the rulers with the new contentScale
+    [[CocosScene cocosScene].rulerLayer setup];
 }
 
 - (void) setResolution:(int)r
@@ -3087,7 +3149,7 @@ static BOOL hideAllToNextSeparator;
     
     ResolutionSetting* setting = [currentDocument.resolutions objectAtIndex:0];
     
-    StageSizeWindow* wc = [[[StageSizeWindow alloc] initWithWindowNibName:@"StageSizeWindow"] autorelease];
+    StageSizeWindow* wc = [[StageSizeWindow alloc] initWithWindowNibName:@"StageSizeWindow"];
     wc.wStage = setting.width;
     wc.hStage = setting.height;
     
@@ -3125,7 +3187,7 @@ static BOOL hideAllToNextSeparator;
         return;
     }
     
-    CustomPropSettingsWindow* wc = [[[CustomPropSettingsWindow alloc] initWithWindowNibName:@"CustomPropSettingsWindow"] autorelease];
+    CustomPropSettingsWindow* wc = [[CustomPropSettingsWindow alloc] initWithWindowNibName:@"CustomPropSettingsWindow"];
     [wc copySettingsForNode:self.selectedNode];
     
     int success = [wc runModalSheetForWindow:window];
@@ -3166,55 +3228,15 @@ static BOOL hideAllToNextSeparator;
     [CCBUtil setSelectedSubmenuItemForMenu:menuCanvasBorder tag:tag];
 }
 
-/*
-- (void) updateJSControlledMenu
-{
-    if (jsControlled)
-    {
-        [menuItemJSControlled setState:NSOnState];
-    }
-    else
-    {
-        [menuItemJSControlled setState:NSOffState];
-    }
-}
-
-- (void) updateDefaultBrowser
-{
-    [menuItemSafari setKeyEquivalent:@""];
-    [menuItemSafari setState:NSOffState];
-    [menuItemChrome setKeyEquivalent:@""];
-    [menuItemChrome setState:NSOffState];
-    [menuItemFirefox setKeyEquivalent:@""];
-    [menuItemFirefox setState:NSOffState];
-    
-    NSString* defaultBrowser = [[NSUserDefaults standardUserDefaults] valueForKey:@"defaultBrowser"];
-    NSMenuItem* defaultBrowserMenuItem;
-    if([defaultBrowser isEqual:@"Chrome"])
-    {
-        defaultBrowserMenuItem = menuItemChrome;
-    }else if([defaultBrowser isEqual:@"Firefox"])
-    {
-        defaultBrowserMenuItem = menuItemFirefox;
-    }else{
-        defaultBrowserMenuItem = menuItemSafari;
-    }
-    [defaultBrowserMenuItem setKeyEquivalentModifierMask: NSShiftKeyMask | NSCommandKeyMask];
-    [defaultBrowserMenuItem setKeyEquivalent:@"b"];
-    [defaultBrowserMenuItem setState:NSOnState];
-}
- */
-
 - (void) updateWarningsButton
 {
-    if (projectSettings.lastWarnings.warnings.count)
-    {
-        [segmPublishBtn setImage:[NSImage imageNamed:@"editor-warning.png"] forSegment:1];
-    }
-    else
-    {
-        [segmPublishBtn setImage:[NSImage imageNamed:@"editor-check.png"] forSegment:1];
-    }
+    [self updateWarningsOutline];
+}
+
+- (void) updateWarningsOutline
+{
+    [warningHandler updateWithWarnings:projectSettings.lastWarnings];
+    [self.warningTableView reloadData];
 }
 
 - (IBAction) menuSetCanvasBorder:(id)sender
@@ -3250,34 +3272,6 @@ static BOOL hideAllToNextSeparator;
     CocosScene* cs = [CocosScene cocosScene];
     cs.scrollOffset = ccp(0,0);
     [cs setStageZoom:1];
-}
-
-- (IBAction) pressedPublishTB:(id)sender
-{
-    NSSegmentedControl* sc = sender;
-    int selectedItem = [[sc cell] selectedSegment];
-    if (!sender) selectedItem = 1;
-    if (selectedItem == 0)
-    {
-        [self menuPublishProject:sender];
-    }
-    else if (selectedItem == 1)
-    {
-        if (projectSettings.lastWarnings.warnings.count)
-        {
-            NSMutableArray* warnings = [NSMutableArray array];
-            for (CCBWarning* warning in projectSettings.lastWarnings.warnings)
-            {
-                [warnings addObject:warning.description];
-            }
-            [SMLErrorPopOver showErrorDescriptions:warnings relativeToView:segmPublishBtn];
-        }
-        else
-        {
-            NSArray* warning = [NSArray arrayWithObject:@"No warnings"];
-            [SMLErrorPopOver showErrorDescriptions:warning relativeToView:segmPublishBtn];
-        }
-    }
 }
 
 - (IBAction) pressedToolSelection:(id)sender
@@ -3409,7 +3403,7 @@ static BOOL hideAllToNextSeparator;
 {
     if (!currentDocument) return;
     
-    SequencerSettingsWindow* wc = [[[SequencerSettingsWindow alloc] initWithWindowNibName:@"SequencerSettingsWindow"] autorelease];
+    SequencerSettingsWindow* wc = [[SequencerSettingsWindow alloc] initWithWindowNibName:@"SequencerSettingsWindow"];
     [wc copySequences:currentDocument.sequences];
     
     int success = [wc runModalSheetForWindow:window];
@@ -3458,7 +3452,7 @@ static BOOL hideAllToNextSeparator;
     if (!currentDocument) return;
     
     // Create new sequence and assign unique id
-    SequencerSequence* newSeq = [[[SequencerSequence alloc] init] autorelease];
+    SequencerSequence* newSeq = [[SequencerSequence alloc] init];
     newSeq.name = @"Untitled Timeline";
     newSeq.sequenceId = [self uniqueSequenceIdFromSequences:currentDocument.sequences];
     
@@ -3488,7 +3482,7 @@ static BOOL hideAllToNextSeparator;
 {
     if (!currentDocument) return;
     
-    SequencerDurationWindow* wc = [[[SequencerDurationWindow alloc] initWithWindowNibName:@"SequencerDurationWindow"] autorelease];
+    SequencerDurationWindow* wc = [[SequencerDurationWindow alloc] initWithWindowNibName:@"SequencerDurationWindow"];
     wc.duration = sequenceHandler.currentSequence.timelineLength;
     
     int success = [wc runModalSheetForWindow:window];
@@ -3496,6 +3490,7 @@ static BOOL hideAllToNextSeparator;
     {
         [sequenceHandler deleteKeyframesForCurrentSequenceAfterTime:wc.duration];
         sequenceHandler.currentSequence.timelineLength = wc.duration;
+        [self updateInspectorFromSelection];
     }
 }
 
@@ -3526,6 +3521,9 @@ static BOOL hideAllToNextSeparator;
     // Check if node can have children
     for (CCNode* c in self.selectedNodes)
     {
+        if(c.locked)
+            continue;
+        
         CCPositionType positionType = [PositionPropertySetter positionTypeForNode:c prop:@"position"];
         if (positionType.xUnit != CCPositionUnitNormalized)
         {
@@ -3567,6 +3565,9 @@ static BOOL hideAllToNextSeparator;
     // Align objects
     for (CCNode* node in self.selectedNodes)
     {
+        if(node.locked)
+            continue;
+        
         CGPoint newAbsPosition = node.positionInPoints;
         if (alignmentType == kCCBAlignHorizontalCenter)
         {
@@ -3598,6 +3599,9 @@ static BOOL hideAllToNextSeparator;
     for (int i = 0; i < self.selectedNodes.count - 1; ++i)
     {
         CCNode* node = [self.selectedNodes objectAtIndex:i];
+        
+        if(node.locked)
+            continue;
         
         CGPoint newAbsPosition = node.position;
         
@@ -3663,6 +3667,8 @@ static BOOL hideAllToNextSeparator;
     {
         CCNode* node = [self.selectedNodes objectAtIndex:i];
         
+
+        
         cxNode = node.contentSize.width * node.scaleX;
         
         x = node.positionInPoints.x - cxNode * node.anchorPoint.x;
@@ -3693,6 +3699,9 @@ static BOOL hideAllToNextSeparator;
     for (int i = 0; i < self.selectedNodes.count; ++i)
     {
         CCNode* node = [sortedNodes objectAtIndex:i];
+        
+        if(node.locked)
+            continue;
         
         CGPoint newAbsPosition = node.positionInPoints;
         
@@ -3731,6 +3740,9 @@ static BOOL hideAllToNextSeparator;
     for (int i = 0; i < self.selectedNodes.count; ++i)
     {
         CCNode* node = [self.selectedNodes objectAtIndex:i];
+        
+        if(node.locked)
+            continue;
         
         cyNode = node.contentSize.height * node.scaleY;
         
@@ -3933,7 +3945,7 @@ static BOOL hideAllToNextSeparator;
     float opt = [sequenceHandler.contextKeyframe.easing.options floatValue];
     
     
-    SequencerKeyframeEasingWindow* wc = [[[SequencerKeyframeEasingWindow alloc] initWithWindowNibName:@"SequencerKeyframeEasingWindow"] autorelease];
+    SequencerKeyframeEasingWindow* wc = [[SequencerKeyframeEasingWindow alloc] initWithWindowNibName:@"SequencerKeyframeEasingWindow"];
     wc.option = opt;
     
     int type = sequenceHandler.contextKeyframe.easing.type;
@@ -4009,6 +4021,49 @@ static BOOL hideAllToNextSeparator;
     }
 }
 
+- (IBAction)menuActionInterfaceFile:(NSMenuItem*)sender
+{
+    //forward to normal handler.
+    [self newDocument:sender];
+}
+
+- (IBAction)menuActionDelete:(id)sender
+{
+    int selectedRow = [sender tag];
+    
+    if (selectedRow >= 0 && projectSettings)
+    {
+        ResourceManagerOutlineView * resManagerOutlineView = (ResourceManagerOutlineView*)outlineProject;
+        
+        [resManagerOutlineView deleteSelectedResource];
+    }
+}
+
+- (IBAction)menuActionNewFolder:(NSMenuItem*)sender
+{
+    //forward to normal handler.
+    [self newFolder:sender];
+}
+
+- (IBAction)menuNewFolder:(NSMenuItem*)sender
+{
+    ResourceManagerOutlineView * resManagerOutlineView = (ResourceManagerOutlineView*)outlineProject;
+    sender.tag = resManagerOutlineView.selectedRow;
+    
+    [self newFolder:sender];
+}
+
+
+- (IBAction)menuNewFile:(NSMenuItem*)sender
+{
+    ResourceManagerOutlineView * resManagerOutlineView = (ResourceManagerOutlineView*)outlineProject;
+    sender.tag = resManagerOutlineView.selectedRow;
+    
+    [self newDocument:sender];
+}
+
+
+
 /*
 - (IBAction)menuEditSmartSpriteSheet:(id)sender
 {
@@ -4067,7 +4122,7 @@ static BOOL hideAllToNextSeparator;
 
 - (IBAction)menuStretchSelectedKeyframes:(id)sender
 {
-    SequencerStretchWindow* wc = [[[SequencerStretchWindow alloc] initWithWindowNibName:@"SequencerStretchWindow"] autorelease];
+    SequencerStretchWindow* wc = [[SequencerStretchWindow alloc] initWithWindowNibName:@"SequencerStretchWindow"];
     wc.factor = 1;
     
     int success = [wc runModalSheetForWindow:window];
@@ -4096,9 +4151,10 @@ static BOOL hideAllToNextSeparator;
     else if (tag == 1) return @"position";
     else if (tag == 2) return @"scale";
     else if (tag == 3) return @"rotation";
-    else if (tag == 4) return @"displayFrame";
+    else if (tag == 4) return @"spriteFrame";
     else if (tag == 5) return @"opacity";
     else if (tag == 6) return @"color";
+    else if (tag == 7) return @"skew";
     else return NULL;
 }
 
@@ -4106,6 +4162,26 @@ static BOOL hideAllToNextSeparator;
 {
     int tag = [sender tag];
     [sequenceHandler menuAddKeyframeNamed:[self keyframePropNameFromTag:tag]];
+}
+
+- (IBAction)menuCutKeyframe:(id)sender
+{
+    [self cut:sender];
+}
+
+- (IBAction)menuCopyKeyframe:(id)sender
+{
+    [self copy:sender];
+}
+
+- (IBAction)menuPasteKeyframes:(id)sender
+{
+    [self paste:sender];
+}
+
+- (IBAction)menuDeleteKeyframe:(id)sender
+{
+    [self cut:sender];
 }
 
 - (IBAction)menuJavaScriptControlled:(id)sender
@@ -4180,9 +4256,9 @@ static BOOL hideAllToNextSeparator;
 
 #pragma mark Playback countrols
 
-- (void) playbackStep:(id) sender
+- (void) updatePlayback
 {
-    int frames = [sender intValue];
+    
     if (!currentDocument)
     {
         [self playbackStop:NULL];
@@ -4191,32 +4267,56 @@ static BOOL hideAllToNextSeparator;
     if (playingBack)
     {
         // Step forward
-        [sequenceHandler.currentSequence stepForward:frames];
+        
+        double thisTime = [NSDate timeIntervalSinceReferenceDate];
+        double deltaTime = thisTime - playbackLastFrameTime;
+        double frameDelta = 1.0/sequenceHandler.currentSequence.timelineResolution;
+        float targetNewTime =  sequenceHandler.currentSequence.timelinePosition + deltaTime;
+        
+        int steps = (int)(deltaTime/frameDelta);
+        
+        //determine new time in to the future.
+        
+        [sequenceHandler.currentSequence stepForward:steps];
         
         if (sequenceHandler.currentSequence.timelinePosition >= sequenceHandler.currentSequence.timelineLength)
         {
-            [self playbackStop:NULL];
-        }
-        else
-        {
-            double thisTime = [NSDate timeIntervalSinceReferenceDate];
-            double requestedDelay = 1/sequenceHandler.currentSequence.timelineResolution;
-            double extraTime = thisTime - (playbackLastFrameTime + requestedDelay);
-            
-            double delayTime = requestedDelay - extraTime;
-            playbackLastFrameTime = thisTime;
-            int nextStep = 1;
-            while (delayTime < 0)
+            //If we loop, calulate the overhang
+            if(targetNewTime >= sequenceHandler.currentSequence.timelinePosition && sequenceHandler.loopPlayback)
             {
-                delayTime += requestedDelay;
-                nextStep++;
-                
+                [self playbackJumpToStart:nil];
+                steps = (int)((targetNewTime - sequenceHandler.currentSequence.timelineLength)/frameDelta);
+                [sequenceHandler.currentSequence stepForward:steps];
             }
-            
-            // Call this method again in a little while
-            [self performSelector:@selector(playbackStep:) withObject:[NSNumber numberWithInt:nextStep] afterDelay:delayTime];
+            else
+            {
+                [self playbackStop:NULL];
+                return;
+            }
         }
+    
+        playbackLastFrameTime += steps * frameDelta;
+        
+        // Call this method again in a little while
+        [self performSelector:@selector(updatePlayback) withObject:nil afterDelay:frameDelta];
+        
     }
+}
+
+- (IBAction)togglePlayback:(id)sender {
+    if(!playingBack)
+    {
+        [self playbackPlay:sender];
+    }
+    else
+    {
+        [self playbackStop:sender];
+    }
+}
+
+- (IBAction)toggleLoopingPlayback:(id)sender
+{
+    sequenceHandler.loopPlayback = [(NSButton*)sender state] == 1 ? YES : NO;
 }
 
 - (IBAction)playbackPlay:(id)sender
@@ -4236,7 +4336,7 @@ static BOOL hideAllToNextSeparator;
     // Start playback
     playbackLastFrameTime = [NSDate timeIntervalSinceReferenceDate];
     playingBack = YES;
-    [self playbackStep:[NSNumber numberWithInt:1]];
+    [self updatePlayback];
 }
 
 - (IBAction)playbackStop:(id)sender
@@ -4247,6 +4347,7 @@ static BOOL hideAllToNextSeparator;
 - (IBAction)playbackJumpToStart:(id)sender
 {
     if (!self.hasOpenedDocument) return;
+    playbackLastFrameTime = [NSDate timeIntervalSinceReferenceDate];
     sequenceHandler.currentSequence.timelinePosition = 0;
     [[SequencerHandler sharedHandler] updateScrollerToShowCurrentTime];
 }
@@ -4342,10 +4443,12 @@ static BOOL hideAllToNextSeparator;
 {
     [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"https://github.com/apportable/SpriteBuilder/issues"]];
 }
+- (IBAction)menuHiddenNode:(id)sender {
+}
 
 - (IBAction)visitCommunity:(id)sender
 {
-    [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"http://www.cocos2d-iphone.org/forum/forum/16"]];
+    [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"http://forum.spritebuilder.com"]];
 }
 
 #pragma mark Debug
@@ -4354,14 +4457,8 @@ static BOOL hideAllToNextSeparator;
 {
     NSLog(@"DEBUG");
     
-    [resManager debugPrintDirectories];
+    [[ResourceManager sharedManager] debugPrintDirectories];
 }
 
-- (void) dealloc
-{
-    [toolbarDelegate release];
-    
-    [super dealloc];
-}
 
 @end

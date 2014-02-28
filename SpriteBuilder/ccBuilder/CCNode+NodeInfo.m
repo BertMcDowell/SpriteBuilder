@@ -76,6 +76,41 @@
     return [[self extraPropForKey:@"seqExpanded"] boolValue];
 }
 
+
+- (void) setLocked:(BOOL)locked
+{
+    [self setExtraProp:[NSNumber numberWithBool:locked] forKey:@"locked"];
+}
+
+- (BOOL) locked
+{
+    return [[self extraPropForKey:@"locked"] boolValue];
+}
+
+- (void) setHidden:(BOOL)hidden
+{
+    [self setExtraProp:[NSNumber numberWithBool:hidden] forKey:@"hidden"];
+}
+
+- (BOOL) hidden
+{
+    return [[self extraPropForKey:@"hidden"] boolValue];
+}
+
+- (BOOL) parentHidden
+{
+    CCNode * parent = self.parent;
+    while(parent)
+    {
+        if(parent.hidden)
+            return YES;
+
+        parent = parent.parent;
+    }
+    
+    return NO;
+}
+
 - (PlugInNode*) plugIn
 {
     NodeInfo* info = self.userObject;
@@ -120,7 +155,7 @@
     
     id baseValue = [self valueForProperty:name atTime:0 sequenceId:seqId];
     
-    SequencerNodeProperty* seqNodeProp = [[[SequencerNodeProperty alloc] initWithProperty:name node:self] autorelease];
+    SequencerNodeProperty* seqNodeProp = [[SequencerNodeProperty alloc] initWithProperty:name node:self];
     if (![info.baseValues objectForKey:name])
     {
         [info.baseValues setObject:baseValue forKey:name];
@@ -144,6 +179,12 @@
     }
     if (time > seq.timelineLength) return;
     
+    //If not supported as animatable type, don't add.
+    if(![[self.plugIn animatablePropertiesForNode:self] containsObject:name])
+    {
+        return;
+    }
+    
     // Save undo state
     [[AppDelegate appDelegate] saveUndoStateWillChangeProperty:@"*addkeyframe"];
     
@@ -161,7 +202,15 @@
     [self updateProperty:name time:[SequencerHandler sharedHandler].currentSequence.timelinePosition sequenceId:seqId];
 }
 
-- (void) addDefaultKeyframeForProperty:(NSString*)name atTime:(float)time sequenceId:(int)seqId
+-(void)customVisit
+{
+    if(self.hidden)
+        return;
+    
+    [self performSelector:@selector(oldVisit) withObject:nil];
+}
+
+- (SequencerKeyframe*) addDefaultKeyframeForProperty:(NSString*)name atTime:(float)time sequenceId:(int)seqId
 {
     // Get property type
     NSString* propType = [self.plugIn propertyTypeForProperty:name];
@@ -170,20 +219,21 @@
     // Ensure that the keyframe type is supported
     if (!keyframeType)
     {
-        return;
+        return nil;
     }
     
     // Ensure that the keyframe type is animated
     if (![[self.plugIn animatablePropertiesForNode:self] containsObject:name])
     {
-        return;
+        return nil;
     }
     
     // Do not add keyframes for disabled properties
-    if ([self shouldDisableProperty:name]) return;
+    if ([self shouldDisableProperty:name])
+        return nil;
     
     // Create keyframe
-    SequencerKeyframe* keyframe = [[[SequencerKeyframe alloc] init] autorelease];
+    SequencerKeyframe* keyframe = [[SequencerKeyframe alloc] init];
     keyframe.time = time;
     keyframe.type = keyframeType;
     keyframe.name = name;
@@ -205,6 +255,7 @@
     }
     
     [self addKeyframe:keyframe forProperty:name atTime:time sequenceId:seqId];
+    return keyframe;
 }
 
 - (void) duplicateKeyframesFromSequenceId:(int)fromSeqId toSequenceId:(int)toSeqId
@@ -234,6 +285,7 @@
     }
 }
 
+
 - (id) valueForProperty:(NSString*)name atTime:(float)time sequenceId:(int)seqId
 {
     SequencerNodeProperty* seqNodeProp = [self sequenceNodeProperty:name sequenceId:seqId];
@@ -248,7 +300,8 @@
     {
         seqValue = [seqNodeProp valueAtTime:time];
     }
-    if (seqValue) return seqValue;
+    if (seqValue)
+        return seqValue;
     
     // Check for base value
     NodeInfo* info = self.userObject;
@@ -261,7 +314,8 @@
     
     // Just use standard value
     if (type == kCCBKeyframeTypeDegrees
-        || type == kCCBKeyframeTypeByte)
+        || type == kCCBKeyframeTypeByte
+        || type == kCCBKeyframeTypeFloat)
     {
         return [self valueForKey:name];
     }
@@ -288,10 +342,8 @@
     }
     else if (type == kCCBKeyframeTypeColor3)
     {
-        NSValue* colorValue = [self valueForKey:name];
-        ccColor3B c;
-        [colorValue getValue:&c];
-        return [CCBWriterInternal serializeColor3:c];
+        CCColor* colorValue = [self valueForKey:name];
+        return [CCBWriterInternal serializeColor4:colorValue];
     }
     else if (type == kCCBKeyframeTypeSpriteFrame)
     {
@@ -348,8 +400,7 @@
     }
     else if (type == kCCBKeyframeTypeColor3)
     {
-        ccColor3B c = [CCBReaderInternal deserializeColor3:value];
-        NSValue* colorValue = [NSValue value:&c withObjCType:@encode(ccColor3B)];
+        CCColor* colorValue = [CCBReaderInternal deserializeColor4:value];
         [self setValue:colorValue forKey:propName];
         
     }
@@ -360,7 +411,8 @@
         
         [TexturePropertySetter setSpriteFrameForNode:self andProperty:propName withFile:sprite andSheetFile:sheet];
     }
-    else if (type == kCCBKeyframeTypeByte)
+    else if (type == kCCBKeyframeTypeByte
+             ||type == kCCBKeyframeTypeFloat)
     {
         [self setValue:value forKey:propName];
     }
@@ -372,6 +424,7 @@
         [self setValue:[NSNumber numberWithFloat:x] forKey:[propName stringByAppendingString:@"X"]];
         [self setValue:[NSNumber numberWithFloat:y] forKey:[propName stringByAppendingString:@"Y"]];
     }
+    
 }
 
 - (void) updatePropertiesTime:(float)time sequenceId:(int)seqId
@@ -515,15 +568,33 @@
 
 - (void) deleteKeyframesAfterTime:(float)time sequenceId:(int)seqId
 {
+    [[AppDelegate appDelegate] saveUndoStateWillChangeProperty:@"*deletekeyframes"];
+    
     NodeInfo* info = self.userObject;
     NSMutableDictionary* seq = [info.animatableProperties objectForKey:[NSNumber numberWithInt:seqId]];
+    
     if (seq)
     {
+        
         NSEnumerator* seqEnum = [seq objectEnumerator];
         SequencerNodeProperty* seqNodeProp;
+        NSMutableArray* emptyProps = [NSMutableArray array];
+        
         while ((seqNodeProp = [seqEnum nextObject]))
         {
             [seqNodeProp deleteKeyframesAfterTime:time];
+            
+            if (seqNodeProp.keyframes.count == 0)
+            {
+                [emptyProps addObject:seqNodeProp.propName];
+            }
+            
+        }
+        
+        // Remove empty seq node props
+        for (NSString* propName in emptyProps)
+        {
+            [seq removeObjectForKey:propName];
         }
     }
     // Also remove keyframes for children
@@ -621,7 +692,7 @@
         
         for (NSString* propName in serProperties)
         {
-            SequencerNodeProperty* seqNodeProp = [[[SequencerNodeProperty alloc] initWithSerialization:[serProperties objectForKey:propName]] autorelease];
+            SequencerNodeProperty* seqNodeProp = [[SequencerNodeProperty alloc] initWithSerialization:[serProperties objectForKey:propName]];
             [properties setObject:seqNodeProp forKey:propName];
         }
         
@@ -639,6 +710,8 @@
     NodeInfo* info = node.userObject;
     
     if (info.displayName && ![info.displayName isEqualToString:@""]) return info.displayName;
+    
+    if (node.name != nil && ![node.name isEqualToString:@""]) return node.name;
     
     // Get class name
     NSString* className = @"";
@@ -715,7 +788,7 @@
     
     for (id serSetting in ser)
     {
-        [customProps addObject:[[[CustomPropSetting alloc] initWithSerialization:serSetting] autorelease]];
+        [customProps addObject:[[CustomPropSetting alloc] initWithSerialization:serSetting]];
     }
     
     self.customProperties = customProps;
@@ -727,7 +800,7 @@
     
     for (id serSetting in ser)
     {
-        CustomPropSetting* setting = [[[CustomPropSetting alloc] initWithSerialization:serSetting] autorelease];
+        CustomPropSetting* setting = [[CustomPropSetting alloc] initWithSerialization:serSetting];
         [self setCustomPropertyNamed:setting.name value:setting.value];
     }
 }

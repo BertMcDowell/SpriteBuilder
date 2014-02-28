@@ -39,6 +39,7 @@
 #import "SequencerKeyframe.h"
 #import "SequencerKeyframeEasing.h"
 #import "SequencerNodeProperty.h"
+#import "SequencerButtonCell.h"
 #import "CCNode+NodeInfo.h"
 #import "CCBDocument.h"
 #import "CCBPCCBFile.h"
@@ -46,6 +47,7 @@
 #import "SequencerSoundChannel.h"
 #import <objc/runtime.h>
 #import "NSPasteboard+CCB.h"
+#import "MainWindow.h"
 
 static SequencerHandler* sharedSequencerHandler;
 
@@ -60,6 +62,7 @@ static SequencerHandler* sharedSequencerHandler;
 @synthesize scroller;
 @synthesize scrollView;
 @synthesize contextKeyframe;
+@synthesize loopPlayback;
 
 #pragma mark Init and singleton object
 
@@ -77,7 +80,7 @@ static SequencerHandler* sharedSequencerHandler;
     [outlineHierarchy setDelegate:self];
     [outlineHierarchy reloadData];
     
-    [outlineHierarchy registerForDraggedTypes:[NSArray arrayWithObjects: @"com.cocosbuilder.node", @"com.cocosbuilder.texture", @"com.cocosbuilder.template", @"com.cocosbuilder.ccb", @"com.cocosbuilder.PlugInNode", NULL]];
+    [outlineHierarchy registerForDraggedTypes:[NSArray arrayWithObjects: @"com.cocosbuilder.node", @"com.cocosbuilder.texture", @"com.cocosbuilder.template", @"com.cocosbuilder.ccb", @"com.cocosbuilder.PlugInNode",@"com.cocosbuilder.wav", NULL]];
     
     [[[outlineHierarchy outlineTableColumn] dataCell] setEditable:YES];
     
@@ -95,8 +98,7 @@ static SequencerHandler* sharedSequencerHandler;
 {
     if (tss != timeScaleSlider)
     {
-        [timeScaleSlider release];
-        timeScaleSlider = [tss retain];
+        timeScaleSlider = tss;
         
         [timeScaleSlider setTarget:self];
         [timeScaleSlider setAction:@selector(timeScaleSliderUpdated:)];
@@ -181,8 +183,7 @@ static SequencerHandler* sharedSequencerHandler;
 {
     if (s != scroller)
     {
-        [scroller release];
-        scroller = [s retain];
+        scroller = s;
         
         [scroller setTarget:self];
         [scroller setAction:@selector(scrollerUpdated:)];
@@ -363,6 +364,9 @@ static SequencerHandler* sharedSequencerHandler;
 {
     if (item == nil) return @"Root";
     
+    
+    CCNode* node = item;
+    
     if ([item isKindOfClass:[SequencerChannel class]])
     {
         SequencerChannel* channel = item;
@@ -374,15 +378,48 @@ static SequencerHandler* sharedSequencerHandler;
         return @"";
     }
     
-    CCNode* node = item;
+    if ([tableColumn.identifier isEqualToString:@"hidden"])
+    {
+        return @(node.hidden);
+    }
+
+    if ([tableColumn.identifier isEqualToString:@"locked"])
+    {
+        return @(node.locked);
+    }
+
     return node.displayName;
+}
+
+-(void)setChildrenHidden:(bool)hidden withChildren:(NSArray*)children
+{
+    for(CCNode * child in children)
+    {
+        child.hidden = hidden;
+        [self setChildrenHidden:hidden withChildren:child.children];
+    }
 }
 
 - (void) outlineView:(NSOutlineView *)outlineView setObjectValue:(id)object forTableColumn:(NSTableColumn *)tableColumn byItem:(id)item
 {
     CCNode* node = item;
     
-    if (![object isEqualToString:node.displayName])
+    if([tableColumn.identifier isEqualToString:@"hidden"])
+    {
+        bool hidden = [(NSNumber*)object boolValue];
+
+        node.hidden = hidden;
+        [outlineView reloadItem:node reloadChildren:YES];
+    }
+    else if([tableColumn.identifier isEqualToString:@"locked"])
+    {
+        node.locked = [(NSNumber*)object boolValue];
+        if([AppDelegate appDelegate].selectedNode == node)
+        {
+            [[AppDelegate appDelegate] updateInspectorFromSelection];
+        }
+    }
+    else if (![object isEqualToString:node.displayName])
     {
         [[AppDelegate appDelegate] saveUndoStateWillChangeProperty:@"*nodeDisplayName"];
         node.displayName = object;
@@ -392,7 +429,18 @@ static SequencerHandler* sharedSequencerHandler;
 - (BOOL) outlineView:(NSOutlineView *)outline shouldEditTableColumn:(NSTableColumn *)tableColumn item:(id)item
 {
     NSLog(@"should edit?");
-    [outline editColumn:0 row:[outline selectedRow] withEvent:[NSApp currentEvent] select:YES];
+    if([tableColumn.identifier isEqualToString:@"hidden"])
+    {
+        return NO;
+    }
+    else if([tableColumn.identifier isEqualToString:@"locked"])
+    {
+        return NO;
+    }
+    else
+    {
+        [outline editColumn:0 row:[outline selectedRow] withEvent:[NSApp currentEvent] select:YES];
+    }
     return YES;
 }
 
@@ -421,32 +469,68 @@ static SequencerHandler* sharedSequencerHandler;
 
 - (NSDragOperation)outlineView:(NSOutlineView *)outlineView validateDrop:(id < NSDraggingInfo >)info proposedItem:(id)item proposedChildIndex:(NSInteger)index
 {
-    if (item == NULL) return NSDragOperationNone;
+    if (item == NULL)
+        return NSDragOperationNone;
     
-    if (![item isKindOfClass:[CCNode class]]) return NSDragOperationNone;
     
     CCBGlobals* g = [CCBGlobals globals];
     NSPasteboard* pb = [info draggingPasteboard];
     
-    NSData* nodeData = [pb dataForType:@"com.cocosbuilder.node"];
-    if (nodeData)
+    if ([item isKindOfClass:[CCNode class]])
     {
-        NSDictionary* clipDict = [NSKeyedUnarchiver unarchiveObjectWithData:nodeData];
-        CCNode* draggedNode = (CCNode*)[[clipDict objectForKey:@"srcNode"] longLongValue];
-        
-        CCNode* node = item;
-        CCNode* parent = [node parent];
-        while (parent && parent != g.rootNode)
+        NSData* nodeData = [pb dataForType:@"com.cocosbuilder.node"];
+        if (nodeData)
         {
-            if (parent == draggedNode) return NSDragOperationNone;
-            parent = [parent parent];
+            NSDictionary* clipDict = [NSKeyedUnarchiver unarchiveObjectWithData:nodeData];
+			void* draggedNodePtr = (void*)[[clipDict objectForKey:@"srcNode"] longLongValue];
+            CCNode* draggedNode = (__bridge CCNode*)draggedNodePtr;
+            
+            CCNode* node = item;
+            CCNode* parent = [node parent];
+            while (parent && parent != g.rootNode)
+            {
+                if (parent == draggedNode) return NSDragOperationNone;
+                parent = [parent parent];
+            }
+            
+            return NSDragOperationGeneric;
         }
         
-        return NSDragOperationGeneric;
+    }
+    
+    // Dropped WavFile;
+    NSArray* pbWavs = [pb propertyListsForType:@"com.cocosbuilder.wav"];
+    
+    if(pbWavs.count != 0)
+    {
+        if([item isKindOfClass:[SequencerSoundChannel class]])
+        {
+            // Dropped WavFile;
+            for (NSDictionary* dict in pbWavs)
+            {
+                NSPoint mouseLocationInWindow = info.draggingLocation;
+                NSPoint mouseLocation = [scrubberSelectionView  convertPoint: mouseLocationInWindow fromView: [appDelegate.window contentView]];
+                
+                currentSequence.soundChannel.dragAndDropTimeStamp = [currentSequence positionToTime:mouseLocation.x];
+                
+                currentSequence.soundChannel.needDragAndDropRedraw = YES;
+                [scrubberSelectionView setNeedsDisplay:YES];
+            
+                return NSDragOperationGeneric;
+            }
+        }
+        else
+            return NSDragOperationNone;
+    }
+    
+    if([item isKindOfClass:[SequencerSoundChannel class]] || [item isKindOfClass:[SequencerCallbackChannel class]] )
+    {
+        return NSDragOperationNone;//Restrict drag and drop
     }
     
     return NSDragOperationGeneric;
 }
+
 
 - (BOOL)outlineView:(NSOutlineView *)outlineView acceptDrop:(id < NSDraggingInfo >)info item:(id)item childIndex:(NSInteger)index
 {
@@ -461,7 +545,8 @@ static SequencerHandler* sharedSequencerHandler;
         if (![appDelegate addCCObject:clipNode toParent:item atIndex:index]) return NO;
         
         // Remove old node
-        CCNode* draggedNode = (CCNode*)[[clipDict objectForKey:@"srcNode"] longLongValue];
+		void* draggedNodePtr = (void*)[[clipDict objectForKey:@"srcNode"] longLongValue];
+		CCNode* draggedNode = (__bridge CCNode*)draggedNodePtr;
         [appDelegate deleteNode:draggedNode];
         
         [appDelegate setSelectedNodes:[NSArray arrayWithObject: clipNode]];
@@ -479,6 +564,22 @@ static SequencerHandler* sharedSequencerHandler;
     {
         [appDelegate dropAddSpriteNamed:[dict objectForKey:@"spriteFile"] inSpriteSheet:[dict objectForKey:@"spriteSheetFile"] at:ccp(0,0) parent:item];
         //[PositionPropertySetter refreshAllPositions];
+        addedObject = YES;
+    }
+    
+    // Dropped WavFile;
+    NSArray* pbWavs = [pb propertyListsForType:@"com.cocosbuilder.wav"];
+    for (NSDictionary* dict in pbWavs)
+    {
+        NSPoint mouseLocationInWindow = info.draggingLocation;
+        NSPoint mouseLocation = [scrubberSelectionView  convertPoint: mouseLocationInWindow fromView: [appDelegate.window contentView]];
+
+        //Create Keyframe
+        SequencerKeyframe * keyFrame = [currentSequence.soundChannel addDefaultKeyframeAtTime:[currentSequence positionToTime:mouseLocation.x]];
+        NSMutableArray* newArr = [NSMutableArray arrayWithArray:keyFrame.value];
+        [newArr replaceObjectAtIndex:kSoundChannelKeyFrameName withObject:dict[@"wavFile"]];
+        keyFrame.value = newArr;
+
         addedObject = YES;
     }
     
@@ -516,7 +617,11 @@ static SequencerHandler* sharedSequencerHandler;
     }
     else if ([item isKindOfClass:[SequencerSoundChannel class]])
     {
-        return kCCBSeqDefaultRowHeight;//+1;
+        SequencerSoundChannel * channel = item;
+        if(!channel.isEpanded)
+            return kCCBSeqDefaultRowHeight;
+        else
+            return kCCBSeqAudioRowHeight;//+1;
     }
     
     CCNode* node = item;
@@ -542,9 +647,20 @@ static SequencerHandler* sharedSequencerHandler;
         if ([tableColumn.identifier isEqualToString:@"expander"])
         {
             SequencerExpandBtnCell* expCell = cell;
-            expCell.isExpanded = NO;
-            expCell.canExpand = NO;
             expCell.node = NULL;
+            
+            if ([item isKindOfClass:[SequencerCallbackChannel class]])
+            {
+                expCell.isExpanded = NO;
+                expCell.canExpand = NO;
+            }
+            else if ([item isKindOfClass:[SequencerSoundChannel class]])
+            {
+                SequencerSoundChannel * soundChannel = item;
+                
+                expCell.isExpanded = soundChannel.isEpanded;
+                expCell.canExpand = YES;
+            }
         }
         else if ([tableColumn.identifier isEqualToString:@"structure"])
         {
@@ -565,12 +681,54 @@ static SequencerHandler* sharedSequencerHandler;
                 seqCell.channel = (SequencerSoundChannel*) item;
             }
         }
+        else if([tableColumn.identifier isEqualToString:@"locked"] ||
+             [tableColumn.identifier isEqualToString:@"hidden"])
+        {
+            SequencerButtonCell * buttonCell = cell;
+            buttonCell.node = nil;
+            
+            if ([item isKindOfClass:[SequencerCallbackChannel class]] ||
+                [item isKindOfClass:[SequencerSoundChannel class]])
+            {
+                [buttonCell setTransparent:YES];
+            }
+            else
+            {
+                [buttonCell setTransparent:NO];
+            }
+            
+        }
         return;
     }
     
     CCNode* node = item;
     BOOL isRootNode = (node == [CocosScene cocosScene].rootNode);
     
+    
+    if([tableColumn.identifier isEqualToString:@"hidden"])
+    {
+        SequencerButtonCell * buttonCell = cell;
+        buttonCell.node = node;
+        [buttonCell setTransparent:NO];
+        
+        if(node.parentHidden)
+        {
+            [buttonCell setEnabled:NO];
+        }
+        else
+        {
+            [buttonCell setEnabled:YES];
+        }
+    }
+    
+    
+    if([tableColumn.identifier isEqualToString:@"locked"])
+    {
+        SequencerButtonCell * buttonCell = cell;
+        [buttonCell setTransparent:NO];
+        buttonCell.node = node;
+    }
+
     if ([tableColumn.identifier isEqualToString:@"expander"])
     {
         SequencerExpandBtnCell* expCell = cell;
@@ -611,17 +769,26 @@ static SequencerHandler* sharedSequencerHandler;
 {
     id item = [outlineHierarchy itemAtRow:row];
     
-    if ([item isKindOfClass:[SequencerChannel class]])
+    if ([item isKindOfClass:[SequencerCallbackChannel class]])
     {
         return;
     }
-    
-    CCNode* node = item;
-    
-    if (node == [CocosScene cocosScene].rootNode && !node.seqExpanded) return;
-    //if ([NSStringFromClass(node.class) isEqualToString:@"CCBPCCBFile"] && !node.seqExpanded) return;
-    
-    node.seqExpanded = !node.seqExpanded;
+    else if([item isKindOfClass:[SequencerSoundChannel class]])
+    {
+        SequencerSoundChannel * soundChannel = item;
+        soundChannel.isEpanded = !soundChannel.isEpanded;
+    }
+    else
+    {
+        CCNode* node = item;
+        
+        if (node == [CocosScene cocosScene].rootNode && !node.seqExpanded)
+            return;
+        
+        //if ([NSStringFromClass(node.class) isEqualToString:@"CCBPCCBFile"] && !node.seqExpanded) return;
+        
+        node.seqExpanded = !node.seqExpanded;
+    }
     
     // Need to reload all data when changing heights of rows
     [outlineHierarchy reloadData];
@@ -783,6 +950,7 @@ static SequencerHandler* sharedSequencerHandler;
             {
                 localTime -= seq.timelineLength;
                 seq = [self seqId:seq.chainedSequenceId inArray:childSequences];
+                childSeqId = seq.sequenceId;
             }
         }
         
@@ -799,8 +967,7 @@ static SequencerHandler* sharedSequencerHandler;
 {
     if (seq != currentSequence)
     {
-        [currentSequence release];
-        currentSequence = [seq retain];
+        currentSequence = seq;
         
         [outlineHierarchy reloadData];
         [[AppDelegate appDelegate] updateTimelineMenu];
@@ -884,11 +1051,8 @@ static SequencerHandler* sharedSequencerHandler;
 - (void) dealloc
 {
     self.currentSequence = NULL;
-    self.scrubberSelectionView = NULL;
-    self.timeDisplay = NULL;
     //self.sequences = NULL;
     
-    [super dealloc];
 }
 
 @end

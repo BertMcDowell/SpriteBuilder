@@ -33,8 +33,8 @@
 #import "SequencerSoundChannel.h"
 #import "SequencerNodeProperty.h"
 #import "SequencerKeyframe.h"
-#import "SimpleAudioEngine.h"
 #import "ResourceManager.h"
+#import "OALSimpleAudio.h"
 
 @implementation SequencerSequence
 
@@ -200,6 +200,7 @@
     return [NSString stringWithFormat:@"%02d:%02d:%02d", mins,secs,frames];
 }
 
+@dynamic currentDisplayTime;
 - (NSString*) currentDisplayTime
 {
     return [self formatTime:timelinePosition];
@@ -216,6 +217,7 @@
     autoPlay = ap;
 }
 
+@dynamic lengthDisplayTime;
 - (NSString*) lengthDisplayTime
 {
     return [self formatTime:timelineLength];
@@ -228,11 +230,14 @@
 
 - (void) stepForward:(int)numSteps
 {
+    if(numSteps == 0)
+        return;
+    
     // Calculate new time
     float newTime = [self alignTimeToResolution: timelinePosition + numSteps/timelineResolution];
     
     // Handle audio
-    NSArray* soundKeyframes = [soundChannel.seqNodeProp keyframesBetweenMinTime:timelinePosition maxTime:newTime - 1.0f/timelineResolution];
+    NSArray* soundKeyframes = [soundChannel.seqNodeProp keyframesBetweenMinTime:timelinePosition maxTime:newTime];
     
     for (SequencerKeyframe* keyframe in soundKeyframes)
     {
@@ -241,10 +246,10 @@
         float pan = [[keyframe.value objectAtIndex:2] floatValue];
         float gain = [[keyframe.value objectAtIndex:3] floatValue];
         
-        NSString* absFile = [[AppDelegate appDelegate].resManager toAbsolutePath:soundFile];
+        NSString* absFile = [[ResourceManager sharedManager] toAbsolutePath:soundFile];
         if ([[NSFileManager defaultManager] fileExistsAtPath:absFile])
         {
-            [[SimpleAudioEngine sharedEngine] playEffect:absFile pitch:pitch pan:pan gain:gain];
+            [[OALSimpleAudio sharedInstance] playEffect:absFile volume:gain pitch:pitch pan:pan loop:NO];
         }
     }
     
@@ -268,16 +273,9 @@
     
     [[CocosScene cocosScene].rootNode duplicateKeyframesFromSequenceId:sequenceId toSequenceId:seqId];
     
-    return [copy autorelease];
+    return copy;
 }
 
-- (void) dealloc
-{
-    self.name = NULL;
-    [callbackChannel release];
-    [soundChannel release];
-    [super dealloc];
-}
 
 - (id) copyWithZone:(NSZone*)zone
 {
@@ -293,8 +291,6 @@
     copy.chainedSequenceId = chainedSequenceId;
     copy.autoPlay = autoPlay;
     
-    [copy->callbackChannel release];
-    [copy->soundChannel release];
     
     copy->callbackChannel = [callbackChannel copy];
     copy->soundChannel = [soundChannel copy];

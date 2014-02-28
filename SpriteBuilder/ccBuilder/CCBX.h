@@ -23,13 +23,15 @@
  */
 
 #import <Foundation/Foundation.h>
+#import "CCBPublishDelegate.h"
 
 @interface CCBX : NSObject
 {
     NSDictionary* serializedProjectSettings;
 }
 
-@property (nonatomic,retain) NSDictionary* serializedProjectSettings;
+@property (nonatomic,strong) NSDictionary* serializedProjectSettings;
+@property (nonatomic,strong) id<CCBPublishDelegate> delegate;
 
 - (NSString*) extension;
 - (NSData*) exportDocument:(NSDictionary *)doc flattenPaths:(BOOL) flattenPaths;

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="4510" systemVersion="13A603" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="4514" systemVersion="13A3028" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none">
     <dependencies>
-        <deployment defaultVersion="1070" identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="4510"/>
-        <plugIn identifier="com.apple.imagekit.ibplugin" version="3336"/>
+        <deployment defaultVersion="1080" identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="4514"/>
+        <plugIn identifier="com.apple.imagekit.ibplugin" version="3338"/>
     </dependencies>
     <objects>
         <customObject id="-2" userLabel="File's Owner" customClass="NSApplication">
@@ -22,12 +22,6 @@
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>
                                     <action selector="menuAbout:" target="494" id="1840"/>
-                                </connections>
-                            </menuItem>
-                            <menuItem title="Check for Updates..." id="1246">
-                                <modifierMask key="keyEquivalentModifierMask"/>
-                                <connections>
-                                    <action selector="checkForUpdates:" target="1448" id="1449"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="236">
@@ -90,9 +84,9 @@
                                             </connections>
                                         </menuItem>
                                         <menuItem isSeparatorItem="YES" id="1936"/>
-                                        <menuItem title="Interface File..." keyEquivalent="n" id="1478">
+                                        <menuItem title="File..." keyEquivalent="n" id="1478">
                                             <connections>
-                                                <action selector="newDocument:" target="494" id="1480"/>
+                                                <action selector="menuNewFile:" target="494" id="gUD-bc-xqj"/>
                                                 <binding destination="494" name="enabled" keyPath="projectSettings" id="1511">
                                                     <dictionary key="options">
                                                         <string key="NSValueTransformerName">NSIsNotNil</string>
@@ -103,7 +97,7 @@
                                         <menuItem title="Folder" id="1935">
                                             <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
-                                                <action selector="newFolder:" target="494" id="1964"/>
+                                                <action selector="menuNewFolder:" target="494" id="O4b-MY-vZy"/>
                                                 <binding destination="494" name="enabled" keyPath="projectSettings" id="1940">
                                                     <dictionary key="options">
                                                         <string key="NSValueTransformerName">NSIsNotNil</string>
@@ -716,15 +710,10 @@ CA
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="Animation" id="1706">
                         <items>
-                            <menuItem title="Play" keyEquivalent="R" id="1715">
+                            <menuItem title="Play/Stop" keyEquivalent=" " id="1715">
+                                <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>
-                                    <action selector="playbackPlay:" target="494" id="1716"/>
-                                </connections>
-                            </menuItem>
-                            <menuItem title="Stop" keyEquivalent="." id="1723">
-                                <modifierMask key="keyEquivalentModifierMask" shift="YES" command="YES"/>
-                                <connections>
-                                    <action selector="playbackStop:" target="494" id="1725"/>
+                                    <action selector="togglePlayback:" target="494" id="6lX-ux-ZY5"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="1741"/>
@@ -754,6 +743,12 @@ CA
                                             <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
                                                 <action selector="menuAddKeyframe:" target="494" id="1751"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Skew" tag="7" keyEquivalent="k" id="4hh-cy-c0A">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="menuAddKeyframe:" target="494" id="DRa-S2-geZ"/>
                                             </connections>
                                         </menuItem>
                                         <menuItem title="Sprite Frame" tag="4" keyEquivalent="f" id="1745">
@@ -873,12 +868,6 @@ CA
                                     <action selector="showHelp:" target="494" id="1806"/>
                                 </connections>
                             </menuItem>
-                            <menuItem title="JavaScript API Documentation" keyEquivalent="?" id="1807">
-                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
-                                <connections>
-                                    <action selector="showAPIDocs:" target="494" id="1808"/>
-                                </connections>
-                            </menuItem>
                             <menuItem isSeparatorItem="YES" id="1775"/>
                             <menuItem title="Report a Bug" id="1776">
                                 <modifierMask key="keyEquivalentModifierMask"/>
@@ -899,10 +888,9 @@ CA
         </menu>
         <window title="SpriteBuilder" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" oneShot="NO" releasedWhenClosed="NO" animationBehavior="default" id="371" customClass="MainWindow">
             <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
-            <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
             <rect key="contentRect" x="255" y="184" width="1150" height="700"/>
             <rect key="screenRect" x="0.0" y="0.0" width="2560" height="1418"/>
-            <value key="minSize" type="size" width="800" height="300"/>
+            <value key="minSize" type="size" width="1150" height="700"/>
             <view key="contentView" id="372" userLabel="Main View">
                 <rect key="frame" x="0.0" y="0.0" width="1150" height="700"/>
                 <autoresizingMask key="autoresizingMask"/>
@@ -918,7 +906,7 @@ CA
                                 <tabViewItems>
                                     <tabViewItem label="File View" identifier="0" id="1972">
                                         <view key="view" id="1973">
-                                            <rect key="frame" x="0.0" y="0.0" width="250" height="640"/>
+                                            <rect key="frame" x="0.0" y="0.0" width="249" height="640"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                             <subviews>
                                                 <splitView dividerStyle="thin" id="1956">
@@ -964,11 +952,11 @@ CA
                                                                             </outlineView>
                                                                         </subviews>
                                                                     </clipView>
-                                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" controlSize="small" id="1500">
+                                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" controlSize="small" horizontal="YES" id="1500">
                                                                         <rect key="frame" x="-100" y="-100" width="353" height="11"/>
                                                                         <autoresizingMask key="autoresizingMask"/>
                                                                     </scroller>
-                                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" controlSize="small" id="1501">
+                                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" controlSize="small" horizontal="NO" id="1501">
                                                                         <rect key="frame" x="339" y="17" width="11" height="213"/>
                                                                         <autoresizingMask key="autoresizingMask"/>
                                                                     </scroller>
@@ -986,7 +974,7 @@ CA
                                     </tabViewItem>
                                     <tabViewItem label="Tileless Editor" identifier="1" id="1974">
                                         <view key="view" id="1975">
-                                            <rect key="frame" x="0.0" y="0.0" width="250" height="640"/>
+                                            <rect key="frame" x="0.0" y="0.0" width="249" height="640"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                             <subviews>
                                                 <splitView dividerStyle="thin" id="1979">
@@ -1004,7 +992,7 @@ CA
                                                                         <rect key="frame" x="0.0" y="0.0" width="251" height="452"/>
                                                                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                                         <subviews>
-                                                                            <ikImageBrowserView autoresizesSubviews="NO" zoomValue="0.073323555290699005" constrainsToOriginalSize="YES" allowsMultipleSelection="NO" id="1986" customClass="CCBImageBrowserView">
+                                                                            <ikImageBrowserView autoresizesSubviews="NO" zoomValue="0.091669850051403046" constrainsToOriginalSize="YES" allowsMultipleSelection="NO" id="1986" customClass="CCBImageBrowserView">
                                                                                 <rect key="frame" x="0.0" y="0.0" width="251" height="452"/>
                                                                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                                                 <ikCellsStyle key="cellsStyleMask" none="YES" titled="YES"/>
@@ -1013,11 +1001,11 @@ CA
                                                                             </ikImageBrowserView>
                                                                         </subviews>
                                                                     </clipView>
-                                                                    <scroller key="horizontalScroller" verticalHuggingPriority="750" id="1990">
+                                                                    <scroller key="horizontalScroller" verticalHuggingPriority="750" horizontal="YES" id="1990">
                                                                         <rect key="frame" x="0.0" y="436" width="251" height="16"/>
                                                                         <autoresizingMask key="autoresizingMask"/>
                                                                     </scroller>
-                                                                    <scroller key="verticalScroller" verticalHuggingPriority="750" doubleValue="1" id="1991">
+                                                                    <scroller key="verticalScroller" verticalHuggingPriority="750" doubleValue="1" horizontal="NO" id="1991">
                                                                         <rect key="frame" x="236" y="0.0" width="15" height="452"/>
                                                                         <autoresizingMask key="autoresizingMask"/>
                                                                     </scroller>
@@ -1072,11 +1060,11 @@ CA
                                                                         </subviews>
                                                                         <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
                                                                     </clipView>
-                                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" id="1994">
+                                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="1994">
                                                                         <rect key="frame" x="0.0" y="173" width="250" height="16"/>
                                                                         <autoresizingMask key="autoresizingMask"/>
                                                                     </scroller>
-                                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" id="1996">
+                                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="NO" id="1996">
                                                                         <rect key="frame" x="224" y="17" width="15" height="102"/>
                                                                         <autoresizingMask key="autoresizingMask"/>
                                                                     </scroller>
@@ -1128,12 +1116,61 @@ CA
                                                             </collectionView>
                                                         </subviews>
                                                     </clipView>
-                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" id="2016">
+                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="2016">
                                                         <rect key="frame" x="1" y="144" width="233" height="15"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                     </scroller>
-                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" doubleValue="1" id="2017">
+                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" doubleValue="1" horizontal="NO" id="2017">
                                                         <rect key="frame" x="234" y="1" width="15" height="143"/>
+                                                        <autoresizingMask key="autoresizingMask"/>
+                                                    </scroller>
+                                                </scrollView>
+                                            </subviews>
+                                        </view>
+                                    </tabViewItem>
+                                    <tabViewItem label="Warnings" identifier="" id="OMr-Cd-S3b">
+                                        <view key="view" id="ElF-wg-3Hc">
+                                            <rect key="frame" x="0.0" y="0.0" width="249" height="640"/>
+                                            <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                            <subviews>
+                                                <scrollView autohidesScrollers="YES" horizontalLineScroll="19" horizontalPageScroll="10" verticalLineScroll="19" verticalPageScroll="10" usesPredominantAxisScrolling="NO" id="XRE-yL-GbY">
+                                                    <rect key="frame" x="0.0" y="0.0" width="249" height="640"/>
+                                                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                    <clipView key="contentView" id="c9e-44-Yg2">
+                                                        <rect key="frame" x="1" y="1" width="247" height="638"/>
+                                                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                                        <subviews>
+                                                            <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" columnAutoresizingStyle="lastColumnOnly" columnSelection="YES" multipleSelection="NO" autosaveColumns="NO" id="8cF-q7-mD1" customClass="WarningTableView">
+                                                                <rect key="frame" x="0.0" y="0.0" width="247" height="638"/>
+                                                                <autoresizingMask key="autoresizingMask"/>
+                                                                <size key="intercellSpacing" width="3" height="2"/>
+                                                                <color key="backgroundColor" name="windowBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                                                <color key="gridColor" name="gridColor" catalog="System" colorSpace="catalog"/>
+                                                                <tableColumns>
+                                                                    <tableColumn width="244" minWidth="40" maxWidth="1000" id="9wJ-gA-SBO">
+                                                                        <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left">
+                                                                            <font key="font" metaFont="smallSystem"/>
+                                                                            <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
+                                                                            <color key="backgroundColor" white="0.33333298560000002" alpha="1" colorSpace="calibratedWhite"/>
+                                                                        </tableHeaderCell>
+                                                                        <textFieldCell key="dataCell" selectable="YES" alignment="left" title="Text Cell" id="pPM-bz-kYC" customClass="WarningCell">
+                                                                            <font key="font" metaFont="system"/>
+                                                                            <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                                                            <color key="backgroundColor" name="windowBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                                                        </textFieldCell>
+                                                                        <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
+                                                                    </tableColumn>
+                                                                </tableColumns>
+                                                            </tableView>
+                                                        </subviews>
+                                                        <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                                    </clipView>
+                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="khv-f3-Kua">
+                                                        <rect key="frame" x="1" y="623" width="247" height="16"/>
+                                                        <autoresizingMask key="autoresizingMask"/>
+                                                    </scroller>
+                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="NO" id="qa3-sP-ojy">
+                                                        <rect key="frame" x="222" y="0.0" width="16" height="0.0"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                     </scroller>
                                                 </scrollView>
@@ -1163,20 +1200,20 @@ CA
                             <popUpButton id="1943">
                                 <rect key="frame" x="0.0" y="1" width="26" height="15"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                                <popUpButtonCell key="cell" type="bevel" title="Item 1" bezelStyle="regularSquare" imagePosition="only" alignment="left" lineBreakMode="truncatingTail" state="on" imageScaling="proportionallyDown" inset="2" pullsDown="YES" arrowPosition="noArrow" preferredEdge="maxY" autoenablesItems="NO" altersStateOfSelectedItem="NO" selectedItem="1946" id="1944">
+                                <popUpButtonCell key="cell" type="bevel" title="Item 1" bezelStyle="regularSquare" imagePosition="only" alignment="left" lineBreakMode="truncatingTail" state="on" imageScaling="proportionallyDown" inset="2" pullsDown="YES" arrowPosition="noArrow" preferredEdge="maxY" autoenablesItems="NO" altersStateOfSelectedItem="NO" id="1944">
                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                     <font key="font" metaFont="menu"/>
                                     <menu key="menu" title="OtherViews" autoenablesItems="NO" id="1945">
                                         <items>
                                             <menuItem title="Item 1" state="on" image="toolbar-btn-add" hidden="YES" id="1946"/>
-                                            <menuItem title="New Interface File..." id="1947">
+                                            <menuItem title="New File..." id="1947">
                                                 <connections>
-                                                    <action selector="newDocument:" target="494" id="1950"/>
+                                                    <action selector="menuNewFile:" target="494" id="PlH-iG-00y"/>
                                                 </connections>
                                             </menuItem>
                                             <menuItem title="New Folder" id="1948">
                                                 <connections>
-                                                    <action selector="newFolder:" target="494" id="1963"/>
+                                                    <action selector="menuNewFolder:" target="494" id="fEV-XG-RIU"/>
                                                 </connections>
                                             </menuItem>
                                         </items>
@@ -1221,7 +1258,7 @@ CA
                                 <autoresizingMask key="autoresizingMask"/>
                                 <subviews>
                                     <imageView id="1236">
-                                        <rect key="frame" x="0.0" y="82" width="250" height="16"/>
+                                        <rect key="frame" x="0.0" y="82" width="293" height="16"/>
                                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                         <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageAlignment="topLeft" imageScaling="axesIndependently" image="header-bg" id="1239"/>
                                     </imageView>
@@ -1249,14 +1286,24 @@ CA
                                         </textFieldCell>
                                     </textField>
                                     <imageView id="1571">
-                                        <rect key="frame" x="230" y="85" width="16" height="9"/>
+                                        <rect key="frame" x="211" y="85" width="16" height="9"/>
                                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                         <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="btn-dropdown-arrows" id="1572"/>
                                     </imageView>
                                     <imageView id="1662">
-                                        <rect key="frame" x="230" y="3" width="16" height="9"/>
+                                        <rect key="frame" x="265" y="3" width="16" height="9"/>
                                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                                         <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="btn-dropdown-arrows" id="1663"/>
+                                    </imageView>
+                                    <imageView id="dPQ-Rb-BA0">
+                                        <rect key="frame" x="254" y="83" width="15" height="15"/>
+                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <imageCell key="cell" refusesFirstResponder="YES" alignment="left" animates="YES" imageScaling="proportionallyDown" image="seq-locked" id="oVw-QF-mZA"/>
+                                    </imageView>
+                                    <imageView id="Leg-Js-aVx">
+                                        <rect key="frame" x="236" y="83" width="15" height="15"/>
+                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <imageCell key="cell" refusesFirstResponder="YES" alignment="left" animates="YES" imageAlignment="bottomLeft" imageScaling="proportionallyUpOrDown" image="seq-visible" id="fVq-qx-BCa"/>
                                     </imageView>
                                     <imageView id="1664">
                                         <rect key="frame" x="4" y="3" width="8" height="9"/>
@@ -1264,7 +1311,7 @@ CA
                                         <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" image="seq-next-seq" id="1665"/>
                                     </imageView>
                                     <popUpButton verticalHuggingPriority="750" id="1573">
-                                        <rect key="frame" x="-3" y="83" width="256" height="15"/>
+                                        <rect key="frame" x="-3" y="83" width="238" height="15"/>
                                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                         <popUpButtonCell key="cell" type="smallSquare" title="Item" bezelStyle="smallSquare" alignment="center" lineBreakMode="truncatingTail" borderStyle="border" transparent="YES" inset="2" pullsDown="YES" id="1574">
                                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
@@ -1315,7 +1362,7 @@ CA
                                         </popUpButtonCell>
                                     </popUpButton>
                                     <popUpButton verticalHuggingPriority="750" id="1668">
-                                        <rect key="frame" x="-3" y="0.0" width="256" height="15"/>
+                                        <rect key="frame" x="-3" y="0.0" width="288" height="15"/>
                                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                                         <popUpButtonCell key="cell" type="smallSquare" title="No Chained Sequence" bezelStyle="smallSquare" alignment="center" lineBreakMode="truncatingTail" borderStyle="border" transparent="YES" inset="2" pullsDown="YES" selectedItem="1678" id="1669">
                                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
@@ -1359,7 +1406,34 @@ CA
                                                             </textFieldCell>
                                                             <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
                                                         </tableColumn>
-                                                        <tableColumn identifier="expander" width="16" minWidth="16" maxWidth="16" id="1545">
+                                                        <tableColumn identifier="hidden" width="18" minWidth="18" maxWidth="18" id="WDa-EU-A0L">
+                                                            <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="H">
+                                                                <font key="font" metaFont="smallSystem"/>
+                                                                <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
+                                                                <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
+                                                            </tableHeaderCell>
+                                                            <buttonCell key="dataCell" type="bevel" bezelStyle="regularSquare" image="seq-visible" imagePosition="above" alignment="center" alternateImage="seq-notset" controlSize="mini" state="on" inset="2" id="9UQ-CC-5my" customClass="SequencerButtonCell">
+                                                                <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                                                <font key="font" metaFont="miniSystem"/>
+                                                                <connections>
+                                                                    <action selector="menuHiddenNode:" target="494" id="qcI-oH-F9z"/>
+                                                                </connections>
+                                                            </buttonCell>
+                                                            <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
+                                                        </tableColumn>
+                                                        <tableColumn identifier="locked" width="18" minWidth="18" maxWidth="18" id="VwP-s1-jlj">
+                                                            <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="L">
+                                                                <font key="font" metaFont="smallSystem"/>
+                                                                <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
+                                                                <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
+                                                            </tableHeaderCell>
+                                                            <buttonCell key="dataCell" type="bevel" bezelStyle="regularSquare" image="seq-notset" imagePosition="above" alignment="center" alternateImage="seq-locked" controlSize="mini" inset="2" id="qzj-vd-6ad" customClass="SequencerButtonCell">
+                                                                <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                                                <font key="font" metaFont="miniSystem"/>
+                                                            </buttonCell>
+                                                            <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
+                                                        </tableColumn>
+                                                        <tableColumn identifier="expander" width="20" minWidth="16" maxWidth="20" id="1545">
                                                             <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Expander">
                                                                 <font key="font" metaFont="smallSystem"/>
                                                                 <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
@@ -1370,7 +1444,7 @@ CA
                                                             </customCell>
                                                             <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
                                                         </tableColumn>
-                                                        <tableColumn identifier="sequencer" width="351" minWidth="10" maxWidth="3.4028234663852886e+38" id="1541">
+                                                        <tableColumn identifier="sequencer" width="311" minWidth="10" maxWidth="3.4028234663852886e+38" id="1541">
                                                             <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Sequencer">
                                                                 <font key="font" metaFont="smallSystem"/>
                                                                 <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
@@ -1386,11 +1460,11 @@ CA
                                             </subviews>
                                             <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
                                         </clipView>
-                                        <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" controlSize="small" id="569">
-                                            <rect key="frame" x="0.0" y="26" width="501" height="11"/>
+                                        <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" controlSize="small" horizontal="YES" id="569">
+                                            <rect key="frame" x="0.0" y="55" width="601" height="11"/>
                                             <autoresizingMask key="autoresizingMask"/>
                                         </scroller>
-                                        <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" controlSize="small" id="567">
+                                        <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" controlSize="small" horizontal="NO" id="567">
                                             <rect key="frame" x="490" y="0.0" width="11" height="26"/>
                                             <autoresizingMask key="autoresizingMask"/>
                                         </scroller>
@@ -1419,6 +1493,18 @@ CA
                                             <binding destination="494" name="enabled" keyPath="hasOpenedDocument" id="1649"/>
                                         </connections>
                                     </segmentedControl>
+                                    <button verticalHuggingPriority="750" id="e6M-L5-cKQ">
+                                        <rect key="frame" x="169" y="100" width="36" height="25"/>
+                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                        <buttonCell key="cell" type="squareTextured" bezelStyle="texturedSquare" image="seq-btn-loop" imagePosition="only" borderStyle="border" inset="2" id="KQc-hl-Mig">
+                                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES" changeBackground="YES" changeGray="YES"/>
+                                            <font key="font" metaFont="system"/>
+                                        </buttonCell>
+                                        <connections>
+                                            <action selector="toggleLoopingPlayback:" target="494" id="nJe-Ul-KfI"/>
+                                            <binding destination="494" name="enabled" keyPath="hasOpenedDocument" id="RA9-Q1-oz6"/>
+                                        </connections>
+                                    </button>
                                     <imageView id="1555">
                                         <rect key="frame" x="510" y="100" width="84" height="24"/>
                                         <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMinY="YES"/>
@@ -1455,15 +1541,15 @@ CA
                                         <sliderCell key="cell" controlSize="mini" continuous="YES" state="on" alignment="left" minValue="32" maxValue="512" doubleValue="128" tickMarkPosition="below" sliderType="linear" id="1565"/>
                                     </slider>
                                     <customView id="1543" customClass="NSScroller">
-                                        <rect key="frame" x="250" y="0.0" width="351" height="16"/>
+                                        <rect key="frame" x="291" y="0.0" width="310" height="16"/>
                                         <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMaxY="YES"/>
                                     </customView>
                                     <customView id="1554" customClass="SequencerTimelineView">
-                                        <rect key="frame" x="250" y="83" width="351" height="14"/>
+                                        <rect key="frame" x="290" y="83" width="311" height="14"/>
                                         <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
                                     </customView>
                                     <customView id="1561" customClass="SequencerScrubberSelectionView">
-                                        <rect key="frame" x="250" y="15" width="351" height="83"/>
+                                        <rect key="frame" x="290" y="15" width="312" height="83"/>
                                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     </customView>
                                     <box autoresizesSubviews="NO" title="Box" boxType="custom" borderType="line" titlePosition="noTitle" id="1544">
@@ -1478,7 +1564,7 @@ CA
                                         <font key="titleFont" metaFont="system"/>
                                     </box>
                                     <box autoresizesSubviews="NO" title="Box" boxType="custom" borderType="line" titlePosition="noTitle" id="1550">
-                                        <rect key="frame" x="250" y="0.0" width="1" height="98"/>
+                                        <rect key="frame" x="290" y="0.0" width="1" height="98"/>
                                         <autoresizingMask key="autoresizingMask" heightSizable="YES"/>
                                         <view key="contentView">
                                             <rect key="frame" x="1" y="1" width="0.0" height="96"/>
@@ -1489,10 +1575,10 @@ CA
                                         <font key="titleFont" metaFont="system"/>
                                     </box>
                                     <box autoresizesSubviews="NO" title="Box" boxType="custom" borderType="line" titlePosition="noTitle" id="1551">
-                                        <rect key="frame" x="234" y="16" width="1" height="66"/>
+                                        <rect key="frame" x="234" y="16" width="1" height="81"/>
                                         <autoresizingMask key="autoresizingMask" heightSizable="YES"/>
                                         <view key="contentView">
-                                            <rect key="frame" x="1" y="1" width="0.0" height="64"/>
+                                            <rect key="frame" x="1" y="1" width="0.0" height="79"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                         </view>
                                         <color key="borderColor" white="0.0" alpha="0.20000000000000001" colorSpace="calibratedWhite"/>
@@ -1560,11 +1646,11 @@ CA
                                                             </view>
                                                         </subviews>
                                                     </clipView>
-                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" id="607">
+                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="607">
                                                         <rect key="frame" x="-100" y="-100" width="183" height="15"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                     </scroller>
-                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" id="606">
+                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="NO" id="606">
                                                         <rect key="frame" x="284" y="1" width="15" height="678"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                     </scroller>
@@ -1590,11 +1676,11 @@ CA
                                                             </view>
                                                         </subviews>
                                                     </clipView>
-                                                    <scroller key="horizontalScroller" verticalHuggingPriority="750" id="2047">
+                                                    <scroller key="horizontalScroller" verticalHuggingPriority="750" horizontal="YES" id="2047">
                                                         <rect key="frame" x="0.0" y="642" width="283" height="15"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                     </scroller>
-                                                    <scroller key="verticalScroller" verticalHuggingPriority="750" doubleValue="1" id="2048">
+                                                    <scroller key="verticalScroller" verticalHuggingPriority="750" doubleValue="1" horizontal="NO" id="2048">
                                                         <rect key="frame" x="283" y="0.0" width="15" height="642"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                     </scroller>
@@ -1888,11 +1974,11 @@ CA
                                                             </view>
                                                         </subviews>
                                                     </clipView>
-                                                    <scroller key="horizontalScroller" verticalHuggingPriority="750" id="H4Q-Vu-Ysx">
+                                                    <scroller key="horizontalScroller" verticalHuggingPriority="750" horizontal="YES" id="H4Q-Vu-Ysx">
                                                         <rect key="frame" x="0.0" y="640" width="298" height="16"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                     </scroller>
-                                                    <scroller key="verticalScroller" verticalHuggingPriority="750" doubleValue="1" id="cW2-Jx-hii">
+                                                    <scroller key="verticalScroller" verticalHuggingPriority="750" doubleValue="1" horizontal="NO" id="cW2-Jx-hii">
                                                         <rect key="frame" x="282" y="0.0" width="16" height="656"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                     </scroller>
@@ -1922,11 +2008,11 @@ CA
                                                             </collectionView>
                                                         </subviews>
                                                     </clipView>
-                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" id="2052">
+                                                    <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="2052">
                                                         <rect key="frame" x="1" y="144" width="233" height="15"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                     </scroller>
-                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" doubleValue="1" id="2053">
+                                                    <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" doubleValue="1" horizontal="NO" id="2053">
                                                         <rect key="frame" x="234" y="1" width="15" height="143"/>
                                                         <autoresizingMask key="autoresizingMask"/>
                                                     </scroller>
@@ -1979,43 +2065,14 @@ CA
                     </customView>
                 </subviews>
             </view>
-            <toolbar key="toolbar" implicitIdentifier="6C6ECFE0-CD8C-41C0-A926-B653D69B96E6" autosavesConfiguration="NO" allowsUserCustomization="NO" showsBaselineSeparator="NO" displayMode="iconAndLabel" sizeMode="regular" id="1224">
+            <toolbar key="toolbar" implicitIdentifier="6C6ECFE0-CD8C-41C0-A926-B653D69B96E6" autosavesConfiguration="NO" allowsUserCustomization="NO" showsBaselineSeparator="NO" displayMode="iconOnly" sizeMode="regular" id="1224">
                 <allowedToolbarItems>
-                    <toolbarItem implicitItemIdentifier="NSToolbarFlexibleSpaceItem" id="1358"/>
-                    <toolbarItem implicitItemIdentifier="13E602E1-2514-4F5A-BE05-2AF5460BB7D6" label="Publish" paletteLabel="Publish" id="1306">
+                    <toolbarItem implicitItemIdentifier="192F0C33-B31A-4EB0-B19F-5D6E22DE76FC" label="" paletteLabel="" id="1788">
                         <nil key="toolTip"/>
-                        <size key="minSize" width="73" height="25"/>
-                        <size key="maxSize" width="87" height="25"/>
-                        <segmentedControl key="view" verticalHuggingPriority="750" id="1304">
-                            <rect key="frame" x="0.0" y="14" width="87" height="25"/>
-                            <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
-                            <segmentedCell key="cell" alignment="left" style="texturedSquare" trackingMode="momentary" id="1305">
-                                <font key="font" metaFont="system"/>
-                                <segments>
-                                    <segment toolTip="Publish" image="TB_build" width="42">
-                                        <nil key="label"/>
-                                    </segment>
-                                    <segment toolTip="Warnings" image="editor-check" width="42" tag="1">
-                                        <nil key="label"/>
-                                    </segment>
-                                </segments>
-                            </segmentedCell>
-                            <connections>
-                                <action selector="pressedPublishTB:" target="494" id="1967"/>
-                                <binding destination="494" name="enabled" keyPath="projectSettings" id="1966">
-                                    <dictionary key="options">
-                                        <string key="NSValueTransformerName">NSIsNotNil</string>
-                                    </dictionary>
-                                </binding>
-                            </connections>
-                        </segmentedControl>
-                    </toolbarItem>
-                    <toolbarItem implicitItemIdentifier="192F0C33-B31A-4EB0-B19F-5D6E22DE76FC" label="View" paletteLabel="View" id="1788">
-                        <nil key="toolTip"/>
-                        <size key="minSize" width="50" height="23"/>
+                        <size key="minSize" width="127" height="23"/>
                         <size key="maxSize" width="132" height="25"/>
                         <segmentedControl key="view" wantsLayer="YES" verticalHuggingPriority="750" id="1786">
-                            <rect key="frame" x="0.0" y="14" width="132" height="23"/>
+                            <rect key="frame" x="0.0" y="14" width="131" height="23"/>
                             <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                             <segmentedCell key="cell" alignment="left" style="capsule" trackingMode="selectAny" id="1787">
                                 <font key="font" metaFont="system"/>
@@ -2036,11 +2093,24 @@ CA
                             </connections>
                         </segmentedControl>
                     </toolbarItem>
+                    <toolbarItem implicitItemIdentifier="NSToolbarFlexibleSpaceItem" id="1358"/>
+                    <toolbarItem implicitItemIdentifier="5B441B81-8CFC-4E92-9164-E5FEC7BE3C84" label="Publish" paletteLabel="Publish" tag="-1" image="TB_build" autovalidates="NO" id="Nkp-mV-yYQ">
+                        <size key="minSize" width="40" height="0.0"/>
+                        <size key="maxSize" width="40" height="0.0"/>
+                        <connections>
+                            <action selector="menuPublishProject:" target="494" id="4AI-Q3-eEF"/>
+                            <binding destination="494" name="enabled" keyPath="projectSettings" id="DI7-MQ-jtn">
+                                <dictionary key="options">
+                                    <string key="NSValueTransformerName">NSIsNotNil</string>
+                                </dictionary>
+                            </binding>
+                        </connections>
+                    </toolbarItem>
                 </allowedToolbarItems>
                 <defaultToolbarItems>
-                    <toolbarItem reference="1306"/>
-                    <toolbarItem reference="1788"/>
+                    <toolbarItem reference="Nkp-mV-yYQ"/>
                     <toolbarItem reference="1358"/>
+                    <toolbarItem reference="1788"/>
                 </defaultToolbarItems>
             </toolbar>
         </window>
@@ -2061,6 +2131,7 @@ CA
                 <outlet property="menuCanvasSize" destination="1264" id="1281"/>
                 <outlet property="menuContextKeyframe" destination="1600" id="1612"/>
                 <outlet property="menuContextKeyframeInterpol" destination="1604" id="1613"/>
+                <outlet property="menuContextKeyframeNoselection" destination="o0p-0U-Ks5" id="H9k-Jz-Iau"/>
                 <outlet property="menuContextResManager" destination="1696" id="1703"/>
                 <outlet property="menuResolution" destination="1264" id="1474"/>
                 <outlet property="menuTimeline" destination="1581" id="1585"/>
@@ -2080,7 +2151,6 @@ CA
                 <outlet property="resourceManagerSplitView" destination="1956" id="1960"/>
                 <outlet property="rightPanel" destination="1795" id="1796"/>
                 <outlet property="scrubberSelectionView" destination="1561" id="1562"/>
-                <outlet property="segmPublishBtn" destination="1304" id="1968"/>
                 <outlet property="sequenceScrollView" destination="566" id="1570"/>
                 <outlet property="splitHorizontalView" destination="1530" id="1793"/>
                 <outlet property="tabBar" destination="1233" id="1234"/>
@@ -2090,23 +2160,32 @@ CA
                 <outlet property="timeScaleSlider" destination="1564" id="1568"/>
                 <outlet property="timelineScroller" destination="1543" id="1569"/>
                 <outlet property="toolbar" destination="1224" id="1755"/>
+                <outlet property="warningTableView" destination="8cF-q7-mD1" id="Rtv-ig-OyD"/>
                 <outlet property="window" destination="371" id="532"/>
             </connections>
         </customObject>
         <customObject id="420" customClass="NSFontManager"/>
         <userDefaultsController representsSharedInstance="YES" id="1042"/>
         <arrayController id="1056"/>
-        <customObject id="1448" customClass="SUUpdater"/>
-        <menu title="Keyframe" id="1600">
+        <menu title="Keyframe" autoenablesItems="NO" id="1600">
             <items>
                 <menuItem title="Cut" id="1601">
                     <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="menuCutKeyframe:" target="494" id="Caf-4E-15b"/>
+                    </connections>
                 </menuItem>
                 <menuItem title="Copy" id="1602">
                     <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="menuCopyKeyframe:" target="494" id="Q0z-6v-6yH"/>
+                    </connections>
                 </menuItem>
                 <menuItem title="Delete" id="1603">
                     <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="menuDeleteKeyframe:" target="494" id="vNR-5j-jJU"/>
+                    </connections>
                 </menuItem>
             </items>
         </menu>
@@ -2207,6 +2286,13 @@ CA
                         <action selector="menuSetEasingOption:" target="494" id="1644"/>
                     </connections>
                 </menuItem>
+                <menuItem isSeparatorItem="YES" id="xTJ-hM-9c0"/>
+                <menuItem title="Paste Keyframes" tag="-1" id="lOW-7T-YJW">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="menuPasteKeyframes:" target="494" id="nRT-bW-3MQ"/>
+                    </connections>
+                </menuItem>
             </items>
         </menu>
         <menu title="ResourceManager" autoenablesItems="NO" id="1696">
@@ -2229,6 +2315,35 @@ CA
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <connections>
                         <action selector="menuCreateKeyframesFromSelection:" target="494" id="1704"/>
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="7hy-dA-Awn"/>
+                <menuItem title="New Interface File..." id="ON2-nH-8h4">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="menuActionInterfaceFile:" target="494" id="uq1-bu-kIq"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="New Folder" id="ZnY-Uc-6ar">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="menuActionNewFolder:" target="494" id="jqi-Pb-64m"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Delete" id="dCr-Uf-VbD">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="menuActionDelete:" target="494" id="5g5-MT-Dbi"/>
+                    </connections>
+                </menuItem>
+            </items>
+        </menu>
+        <menu title="KeyframeNoselection" autoenablesItems="NO" id="o0p-0U-Ks5">
+            <items>
+                <menuItem title="Paste Keyframes" id="FHf-6L-GDN">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="menuPasteKeyframes:" target="494" id="ghw-bV-eRX"/>
                     </connections>
                 </menuItem>
             </items>
@@ -2280,7 +2395,7 @@ CA
                         <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                     </textFieldCell>
                 </textField>
-                <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" tag="2" setsMaxLayoutWidthAtFirstLayout="YES" id="2027">
+                <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" tag="2" id="2027">
                     <rect key="frame" x="52" y="4" width="196" height="27"/>
                     <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                     <textFieldCell key="cell" controlSize="mini" sendsActionOnEndEditing="YES" title="Short description about the fuction of this type of node. No longer than two lines" id="2028">
@@ -2333,26 +2448,37 @@ CA
             </connections>
         </customObject>
         <customObject id="fa4-D5-pFD" customClass="PhysicsHandler"/>
+        <collectionViewItem id="19X-cC-WDn"/>
+        <collectionViewItem id="0wd-3s-3IL"/>
+        <collectionViewItem id="J5b-i6-X22"/>
+        <collectionViewItem id="B7O-dp-0YO"/>
+        <customView id="9y0-Gx-WWs">
+            <rect key="frame" x="0.0" y="0.0" width="248" height="27"/>
+            <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+        </customView>
     </objects>
     <resources>
         <image name="NSStopProgressTemplate" width="11" height="11"/>
         <image name="TB_bottomPanel" width="25" height="22"/>
-        <image name="TB_build" width="16" height="16"/>
+        <image name="TB_build" width="32" height="32"/>
         <image name="TB_leftPanel" width="25" height="22"/>
         <image name="TB_plugins" width="36" height="16"/>
         <image name="TB_rightPanel" width="25" height="22"/>
         <image name="btn-dropdown-arrows" width="16" height="9"/>
-        <image name="editor-check" width="16" height="16"/>
         <image name="header-bg" width="19" height="17"/>
+        <image name="seq-btn-loop" width="22" height="16"/>
         <image name="seq-btn-play" width="22" height="16"/>
         <image name="seq-btn-restart" width="22" height="16"/>
         <image name="seq-btn-stepback" width="22" height="16"/>
         <image name="seq-btn-stepforward" width="22" height="16"/>
         <image name="seq-btn-stop" width="22" height="16"/>
         <image name="seq-ctrl-bg" width="32" height="32"/>
+        <image name="seq-locked" width="15" height="15"/>
         <image name="seq-next-seq" width="8" height="9"/>
+        <image name="seq-notset" width="15" height="15"/>
         <image name="seq-scaleslide-bg" width="117" height="24"/>
         <image name="seq-timedisplay-bg" width="84" height="24"/>
+        <image name="seq-visible" width="15" height="15"/>
         <image name="toolbar-btn-add" width="14" height="14"/>
     </resources>
 </document>

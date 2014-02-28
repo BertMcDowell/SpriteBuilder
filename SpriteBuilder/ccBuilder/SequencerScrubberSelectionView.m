@@ -45,8 +45,8 @@
     self = [super initWithFrame:frame];
     if (!self) return NULL;
     
-    imgScrubHandle = [[NSImage imageNamed:@"seq-scrub-handle.png"] retain];
-    imgScrubLine = [[NSImage imageNamed:@"seq-scrub-line.png"] retain];
+    imgScrubHandle = [NSImage imageNamed:@"seq-scrub-handle.png"];
+    imgScrubLine = [NSImage imageNamed:@"seq-scrub-line.png"];
     
     return self;
 }
@@ -347,7 +347,7 @@
     {
         SequencerChannel* channel = item;
         [channel addDefaultKeyframeAtTime:time];
-        
+    
         return;
     }
     
@@ -540,7 +540,8 @@
     }
     
     NSOutlineView* outlineView = [SequencerHandler sharedHandler].outlineHierarchy;
-    
+    [self.window makeFirstResponder:nil];
+
     lastMousePosition = mouseLocation;
     
     SequencerSequence* seq = [SequencerHandler sharedHandler].currentSequence;
@@ -550,6 +551,7 @@
     
     float timeMin = [seq positionToTime:mouseLocation.x - 3];
     float timeMax = [seq positionToTime:mouseLocation.x + 3];
+    timeMax = max(timeMax, timeMax +  1.0/(double)[SequencerHandler sharedHandler].currentSequence.timelineResolution);//Ensure at least one delta time step.
     
     int row = [self yMousePosToRow:mouseLocation.y];
     int subRow = [self yMousePosToSubRow:mouseLocation.y];
@@ -878,6 +880,15 @@
     SequencerKeyframe* keyframe = [self keyframeForRow:row sub:subRow minTime:timeMin maxTime:timeMax];
     if (keyframe)
     {
+        mouseDownKeyframe = keyframe;
+        // Handle selections
+        if (!mouseDownKeyframe.selected)
+        {
+            [[SequencerHandler sharedHandler] deselectAllKeyframes];
+            mouseDownKeyframe.selected = YES;
+        }
+
+        
         [SequencerHandler sharedHandler].contextKeyframe = keyframe;
         return [AppDelegate appDelegate].menuContextKeyframe;
     }
@@ -911,18 +922,44 @@
         NSMenuItem* itemOpt = [menu itemWithTag:-1];
         [itemOpt setEnabled: keyframe.easing.hasOptions];
         
+        //Enabled 'Paste Keyframes' if its available
+        for (NSMenuItem* item in menu.itemArray)
+        {
+            if(item.action == @selector(menuPasteKeyframes:))
+            {
+                NSPasteboard* cb = [NSPasteboard generalPasteboard];
+                NSString* type = [cb availableTypeFromArray:[NSArray arrayWithObjects:kClipboardKeyFrames, kClipboardChannelKeyframes, nil]];
+                
+                //We've got a copy paste of a keyframe. Enable the Paste menuitem.
+                [item setEnabled:type != nil ? YES : NO];
+
+            }
+        }
+        
+        return menu;
+    }
+    else
+    {
+        NSMenu* menu = [AppDelegate appDelegate].menuContextKeyframeNoselection;
+        
+        //Enabled 'Paste Keyframes' if its available
+        for (NSMenuItem* item in menu.itemArray)
+        {
+            if(item.action == @selector(menuPasteKeyframes:))
+            {
+                NSPasteboard* cb = [NSPasteboard generalPasteboard];
+                NSString* type = [cb availableTypeFromArray:[NSArray arrayWithObjects:kClipboardKeyFrames, kClipboardChannelKeyframes, nil]];
+                
+                //We've got a copy paste of a keyframe. Enable the Paste menuitem.
+                [item setEnabled:type != nil ? YES : NO];
+                
+            }
+        }
         return menu;
     }
     
     return NULL;
 }
 
-- (void) dealloc
-{
-    [imgScrubHandle release];
-    [imgScrubLine release];
-    self.lastDragEvent = NULL;
-    [super dealloc];
-}
 
 @end

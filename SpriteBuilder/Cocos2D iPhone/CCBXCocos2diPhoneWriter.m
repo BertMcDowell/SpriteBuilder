@@ -80,20 +80,16 @@
     return self;
 }
 
-- (void) dealloc
-{
-    [data release];
-    [propTypes release];
-    [stringCacheLookup release];
-    [stringCache release];
-    [serializedProjectSettings release];
-    [super dealloc];
-}
 
 - (int) propTypeIdForName:(NSString*)prop
 {
     NSInteger propType = [propTypes indexOfObject:prop];
-    if (propType == NSNotFound) return -1;
+    if (propType == NSNotFound)
+    {
+        if([prop isEqualToString:@"StringSimple"])
+            return [self propTypeIdForName:@"String"];
+    
+    }
     return (int)propType;
 }
 
@@ -280,21 +276,6 @@
     // Property name
     [self writeCachedString:name isPath:NO];
     
-    // Supported platforms
-    if (!platform) [self writeByte:kCCBXPlatformAll];
-    else if ([platform isEqualToString:@"iOS"])
-    {
-        [self writeByte:kCCBXPlatformIOS];
-    }
-    else if ([platform isEqualToString:@"Mac"])
-    {
-        [self writeByte:kCCBXPlatformMac];
-    }
-    else
-    {
-        [self writeByte:kCCBXPlatformAll];
-    }
-    
     if ([type isEqualToString:@"Position"])
     {
         float x = [[prop objectAtIndex:0] floatValue];
@@ -407,13 +388,22 @@
         [self writeInt:[c intValue] withSign:NO];
     }
     else if ([type isEqualToString:@"Texture"]
-             || [type isEqualToString:@"FntFile"]
              || [type isEqualToString:@"CCBFile"])
     {
         [self writeCachedString:prop isPath: YES];
     }
+    else if ([type isEqualToString:@"FntFile"])
+    {
+        NSString* fntName = [[prop lastPathComponent] stringByDeletingPathExtension];
+        NSString* path = [[prop stringByAppendingPathComponent:fntName] stringByAppendingPathExtension:@"fnt"];
+        
+        NSLog(@"FNT file: %@", path);
+        
+        [self writeCachedString:path isPath: YES];
+    }
     else if ([type isEqualToString:@"Text"]
-             || [type isEqualToString:@"String"])
+             || [type isEqualToString:@"String"]
+             || [type isEqualToString:@"StringSimple"])
     {
         NSString* str = NULL;
         BOOL localized = NO;
@@ -436,25 +426,17 @@
     {
         [self writeCachedString:prop isPath: NO];
     }
-    else if ([type isEqualToString:@"Color3"])
+    else if ([type isEqualToString:@"Color4"] ||
+             [type isEqualToString:@"Color3"])
     {
-        int a = [[prop objectAtIndex:0] intValue];
-        int b = [[prop objectAtIndex:1] intValue];
-        int c = [[prop objectAtIndex:2] intValue];
-        [self writeByte:a];
-        [self writeByte:b];
-        [self writeByte:c];
-    }
-    else if ([type isEqualToString:@"Color4"])
-    {
-        int a = [[prop objectAtIndex:0] intValue];
-        int b = [[prop objectAtIndex:1] intValue];
-        int c = [[prop objectAtIndex:2] intValue];
-        int d = [[prop objectAtIndex:3] intValue];
-        [self writeByte:a];
-        [self writeByte:b];
-        [self writeByte:c];
-        [self writeByte:d];
+        CGFloat a = [[prop objectAtIndex:0] floatValue];
+        CGFloat b = [[prop objectAtIndex:1] floatValue];
+        CGFloat c = [[prop objectAtIndex:2] floatValue];
+        CGFloat d = [[prop objectAtIndex:3] floatValue];
+        [self writeFloat:a];
+        [self writeFloat:b];
+        [self writeFloat:c];
+        [self writeFloat:d];
     }
     else if ([type isEqualToString:@"Color4FVar"])
     {
@@ -491,14 +473,6 @@
     [self addToStringCache:[node objectForKey:@"baseClass"] isPath:NO];
     [self addToStringCache:[node objectForKey:@"customClass"] isPath:NO];
     [self addToStringCache:[node objectForKey:@"memberVarAssignmentName"] isPath:NO];
-    
-    // Add JS controller class
-    if (jsControlled)
-    {
-        NSString* jsController = [node objectForKey:@"jsController"];
-        if (!jsController) jsController = @"";
-        [self addToStringCache:jsController isPath:NO];
-    }
     
     // Animated properties
     NSDictionary* animatedProps = [node objectForKey:@"animatedProperties"];
@@ -612,14 +586,20 @@
         {
             [self addToStringCache:[value objectAtIndex:0] isPath:NO];
         }
-        else if ([type isEqualToString:@"FntFile"]
-                 || [type isEqualToString:@"Texture"]
+        else if ([type isEqualToString:@"Texture"]
                  || [type isEqualToString:@"CCBFile"])
         {
             [self addToStringCache:value isPath:YES];
         }
+        else if ([type isEqualToString:@"FntFile"])
+        {
+            NSString* fntName = [[value lastPathComponent] stringByDeletingPathExtension];
+            NSString* path = [[value stringByAppendingPathComponent:fntName] stringByAppendingPathExtension:@"fnt"];
+            [self addToStringCache:path isPath:YES];
+        }
         else if ([type isEqualToString:@"Text"]
-                 || [type isEqualToString:@"String"])
+                 || [type isEqualToString:@"String"]
+                 || [type isEqualToString:@"StringSimple"] )
         {
             NSString* str = NULL;
             if ([value isKindOfClass:[NSString class]])
@@ -781,7 +761,7 @@
         [stringCacheLookup setObject:[NSNumber numberWithInt:i] forKey:str];
     }
     
-    stringCache = [stringCacheSortedReverse retain];
+    stringCache = stringCacheSortedReverse;
 }
 
 - (void) writeHeader
@@ -792,9 +772,6 @@
     
     // Version
     [self writeInt:kCCBXVersion withSign:NO];
-    
-    // JavaScript or not
-    [self writeBool:jsControlled];
 }
 
 - (void) writeStringCache
@@ -833,27 +810,19 @@
     {
         [self writeByte:[value intValue]];
     }
-    else if ([type isEqualToString:@"Color3"])
+    else if ([type isEqualToString:@"Color4"] ||
+             [type isEqualToString:@"Color3"])
     {
-        int a = [[value objectAtIndex:0] intValue];
-        int b = [[value objectAtIndex:1] intValue];
-        int c = [[value objectAtIndex:2] intValue];
-        [self writeByte:a];
-        [self writeByte:b];
-        [self writeByte:c];
+        float a = [[value objectAtIndex:0] floatValue];
+        float b = [[value objectAtIndex:1] floatValue];
+        float c = [[value objectAtIndex:2] floatValue];
+        float d = [[value objectAtIndex:3] floatValue];
+        [self writeFloat:a];
+        [self writeFloat:b];
+        [self writeFloat:c];
+        [self writeFloat:d];
     }
-    else if ([type isEqualToString:@"Color4"])
-    {
-        int a = [[value objectAtIndex:0] intValue];
-        int b = [[value objectAtIndex:1] intValue];
-        int c = [[value objectAtIndex:2] intValue];
-        int d = [[value objectAtIndex:3] intValue];
-        [self writeByte:a];
-        [self writeByte:b];
-        [self writeByte:c];
-        [self writeByte:d];
-    }
-    else if ([type isEqualToString:@"Degrees"])
+    else if ([type isEqualToString:@"Degrees"] || [type isEqualToString:@"Float"])
     {
         [self writeFloat:[value floatValue]];
     }
@@ -888,7 +857,6 @@
 {
     // Write class
     NSString* class = [node objectForKey:@"customClass"];
-    if (jsControlled) class = @"";
     
     BOOL hasCustomClass = YES;
     if (!class || [class isEqualToString:@""])
@@ -898,19 +866,17 @@
     }
     [self writeCachedString:class isPath:NO];
     
-    // Write controller
-    if (jsControlled)
-    {
-        NSString* jsController = [node objectForKey:@"jsController"];
-        if (!jsController) jsController = @"";
-        [self writeCachedString:jsController isPath:NO];
-    }
-    
     // Write assignment type and name
     int memberVarAssignmentType = [[node objectForKey:@"memberVarAssignmentType"] intValue];
     [self writeInt:memberVarAssignmentType withSign:NO];
     if (memberVarAssignmentType)
     {
+        if([[node objectForKey:@"memberVarAssignmentName"] isEqualToString:@""])
+        {
+
+            [self.delegate addWarningWithDescription:[NSString stringWithFormat:@"Member ivar assigned with <blank> name. This will likely fail at runtime. Node %@", node[@"displayName"]] isFatal:NO relatedFile:Nil resolution:nil];
+            
+        }
         [self writeCachedString:[node objectForKey:@"memberVarAssignmentName"] isPath:NO];
     }
     
@@ -952,6 +918,7 @@
             else if (kfType == kCCBKeyframeTypeSpriteFrame) propType = @"SpriteFrame";
             else if (kfType == kCCBKeyframeTypePosition) propType = @"Position";
             else if (kfType == kCCBKeyframeTypeFloatXY) propType = @"FloatXY";
+            else if (kfType == kCCBKeyframeTypeFloat) propType = @"Float";
             
             NSAssert(propType, @"Unknown animated property type");
             
@@ -1098,7 +1065,7 @@
         
         NSAssert(type, @"Failed to find custom type");
         
-        [self writeProperty:value type:type name:name platform:kCCBXPlatformAll];
+        [self writeProperty:value type:type name:name platform:nil];
     }
     
     // Write physics
@@ -1159,7 +1126,6 @@
 - (void) writeDocument:(NSDictionary*)doc
 {
     NSDictionary* nodeGraph = [doc objectForKey:@"nodeGraph"];
-    jsControlled = [[doc objectForKey:@"jsControlled"] boolValue];
     
     [self cacheStringsForNode:nodeGraph];
     [self cacheStringsForSequences:doc];
@@ -1169,6 +1135,11 @@
     [self writeStringCache];
     [self writeSequences:doc];
     [self writeNodeGraph:nodeGraph];
+
+    //Elias Gamma reader reads a full int off the end, reading outside the bounds by 3 bytes and setting off Guard Malloc detections. Pad file with 3 bytes.
+    [self writeBool:NO];
+    [self writeBool:NO];
+    [self writeBool:NO];
 }
 
 @end

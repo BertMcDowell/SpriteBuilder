@@ -7,7 +7,7 @@
 	<key>displayName</key>
 	<string>Particle System</string>
 	<key>ordering</key>
-	<integer>6000</integer>
+	<integer>8000</integer>
 	<key>description</key>
 	<string>Emits particles for effects such as smoke, fire and rain.</string>
 	<key>inheritsFrom</key>
@@ -15,7 +15,7 @@
 	<key>canHaveChildren</key>
 	<false/>
 	<key>className</key>
-	<string>CCParticleSystemQuad</string>
+	<string>CCParticleSystem</string>
 	<key>canBeRootNode</key>
 	<true/>
 	<key>propertiesOverridden</key>
@@ -255,6 +255,18 @@
 			<string>Blendmode</string>
 			<key>name</key>
 			<string>blendFunc</string>
+		</dict>
+		<dict>
+			<key>saveInTemplate</key>
+			<true/>
+			<key>default</key>
+			<integer>1</integer>
+			<key>displayName</key>
+			<string>reset on visibility toggle</string>
+			<key>type</key>
+			<string>Check</string>
+			<key>name</key>
+			<string>resetOnVisibilityToggle</string>
 		</dict>
 		<dict>
 			<key>displayName</key>
